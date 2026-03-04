@@ -4,7 +4,7 @@ A tool that tracks moving objects in a video with SAM2 and outputs a single stro
 
 ## Demo
 
-<video src="./demo.mp4" controls width="720"></video>
+<video src="https://github.com/user-attachments/assets/7e9e4808-0e15-4ef1-9104-1e2c4e437b16"></video>
 
 ## Requirements
 
