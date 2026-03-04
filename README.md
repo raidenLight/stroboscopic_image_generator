@@ -15,9 +15,13 @@ https://docs.astral.sh/uv/getting-started/installation/
 
 ## Setup
 
+1. Set up the `uv` environment:
+
 ```bash
 uv sync
 ```
+
+2. Place your input video in the `video` directory.
 
 ## Example Command
 
