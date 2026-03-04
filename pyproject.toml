@@ -1,0 +1,12 @@
+[project]
+name = "stroboscopic-image-generator"
+version = "0.1.0"
+description = "Generate stroboscopic images from videos with SAM2 tracking."
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "opencv-python>=4.10.0",
+    "huggingface-hub>=0.30.0",
+    "sam-2 @ git+https://github.com/facebookresearch/sam2.git",
+    "eva-decord>=0.6.1",
+]
