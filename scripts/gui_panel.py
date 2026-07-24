@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from gui_app import StroboscopicGUI
 
 PANEL_WIDTH = 430
-PANEL_HEIGHT = 720
+PANEL_HEIGHT = 640
 
 
 class ControlPanel:
@@ -25,7 +25,7 @@ class ControlPanel:
         self.root.title("控制面板 — 频闪图像生成器")
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.resizable(True, True)
-        self.root.minsize(360, 620)
+        self.root.minsize(360, 580)
         self.root.geometry(f"{PANEL_WIDTH}x{PANEL_HEIGHT}+50+50")
         self.root.lift()
         # ★ bind_all 确保 Entry 等控件获焦时快捷键也生效
