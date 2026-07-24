@@ -118,6 +118,9 @@ class StroboscopicGUI:
         # ── 中止回滚 snapshot ──
         self._pre_tracking_masks: dict[int, dict[int, np.ndarray]] = {}
 
+        # ── 模态对话框保护锁（tick 期间有 messagebox 弹出时跳过渲染/重建，避免卡死）──
+        self._in_modal: bool = False
+
     # ==================================================================
     # 物体管理
     # ==================================================================
@@ -195,7 +198,12 @@ class StroboscopicGUI:
                     msg = f"确定要删除 {obj.name}？"
                     if has_mask:
                         msg += f"\n（将同时删除其所有跟踪 mask）"
-                    if not self.panel.confirm("删除物体", msg):
+                    self._in_modal = True
+                    try:
+                        confirmed = self.panel.confirm("删除物体", msg)
+                    finally:
+                        self._in_modal = False
+                    if not confirmed:
                         return
                 self._remove_object(obj)
                 self._set_status(f"已删除 {obj.name}", "warn")
@@ -263,7 +271,11 @@ class StroboscopicGUI:
 
         elif name == "toggle_frame_object":
             if self.panel:
-                result = self.panel.toggle_frame_objects_dialog()
+                self._in_modal = True
+                try:
+                    result = self.panel.toggle_frame_objects_dialog()
+                finally:
+                    self._in_modal = False
                 if result is not None:
                     fidx = self.current_frame_idx
                     if fidx not in self.frame_overrides:
@@ -276,7 +288,7 @@ class StroboscopicGUI:
             if self.state == GUIState.EDIT:
                 if self._range_start is None:
                     self._range_start = self.current_frame_idx
-                    self._set_status(f"范围起点: {self._range_start}。再点一次设终点。", "info")
+                    self._set_status(f"范围起点: {self._range_start}。再按一次 R 设终点。", "info")
                 else:
                     start, end = sorted([self._range_start, self.current_frame_idx])
                     for f in range(start, end + 1):
@@ -331,12 +343,22 @@ class StroboscopicGUI:
                 return
             msg = self._composite_and_save()
             if self.panel:
-                self.panel.show_info("保存成功", msg)
+                self._in_modal = True
+                try:
+                    self.panel.show_info("保存成功", msg)
+                finally:
+                    self._in_modal = False
             self._set_status(msg, "success")
 
         elif name == "restart":
-            if self.panel and not self.panel.confirm("重置全部", "确定要清除所有数据重新开始？"):
-                return
+            if self.panel:
+                self._in_modal = True
+                try:
+                    ok = self.panel.confirm("重置全部", "确定要清除所有数据重新开始？")
+                finally:
+                    self._in_modal = False
+                if not ok:
+                    return
             if self.inference_state is not None:
                 with contextlib.suppress(Exception):
                     self.predictor.reset_state(self.inference_state)
@@ -362,18 +384,22 @@ class StroboscopicGUI:
     # 状态消息
     # ==================================================================
     def _set_status(self, msg: str, level: str = "info") -> None:
+        """设置状态消息（终端打印中文，OpenCV 覆盖层不显示中文避免乱码）。"""
         self.status_message = msg
+        # 终端显示完整中文消息
+        prefix = {"error": "[ERROR]", "warn": "[WARN]", "success": "[OK]", "info": "[INFO]"}
+        print(f"{prefix.get(level, '[INFO]')} {msg}")
         if level == "error":
-            self.status_color = (0, 0, 255)    # 红
+            self.status_color = (0, 0, 255)
             self.status_timer = 180
         elif level == "warn":
-            self.status_color = (0, 200, 255)  # 黄
+            self.status_color = (0, 200, 255)
             self.status_timer = 120
         elif level == "success":
-            self.status_color = (0, 255, 0)    # 绿
+            self.status_color = (0, 255, 0)
             self.status_timer = 150
         else:
-            self.status_color = (0, 255, 255)  # 青
+            self.status_color = (0, 255, 255)
             self.status_timer = 90
 
     # ==================================================================
@@ -397,6 +423,13 @@ class StroboscopicGUI:
             if self._quit_flag:
                 self.panel.destroy()
                 cv2.destroyWindow(WINDOW_NAME)
+                return
+
+            # 模态对话框期间跳过渲染+面板同步，避免 messagebox 嵌套事件循环中
+            # OpenCV 操作或 UI 重建导致 tkinter 卡死
+            if self._in_modal:
+                if not self._quit_flag:
+                    self.panel.root.after(50, tick)
                 return
 
             try:
@@ -634,10 +667,10 @@ class StroboscopicGUI:
         cv2.addWeighted(overlay, 0.55, canvas, 0.45, 0, canvas)
 
         lines = [
-            ("在视频上点击，标记要跟踪的物体", 1.2),
-            ("按 N 新建物体  |  按 Enter 开始跟踪", 0.8),
-            ("不同物体用不同颜色标记", 0.7),
-            ("右侧控制面板提供完整操作入口", 0.7),
+            ("Click on video to mark objects to track", 1.1),
+            ("N: New object  |  Enter: Start tracking", 0.7),
+            ("P: Preview  |  K: Mark frame  |  S: Save", 0.6),
+            ("Use control panel on the right for all actions", 0.6),
         ]
         cy = self.h // 2 - 40
         for text, scale in lines:
@@ -875,21 +908,16 @@ class StroboscopicGUI:
 
         if self.state == GUIState.TRACKING:
             n_masks = sum(len(m) for m in self.masks.values())
-            info = (f"跟踪中 | 帧 {self.current_frame_idx}/{self.n_frames}"
-                    f" | 物体: {n_objs} | Mask: {n_masks}")
+            info = (f"TRACKING | Frame {self.current_frame_idx}/{self.n_frames}"
+                    f" | Objs: {n_objs} | Masks: {n_masks}")
         else:
             marked = "K" if self.current_frame_idx in self.composite_frames else "-"
-            info = (f"编辑 | 帧 {self.current_frame_idx}/{self.n_frames}"
-                    f" | 活跃: {active_name} | 已标记: {len(self.composite_frames)}"
-                    f" | 背景: 帧{self.background_frame_idx} | [{marked}]")
+            info = (f"EDIT | Frame {self.current_frame_idx}/{self.n_frames}"
+                    f" | Active: {active_name} | Marked: {len(self.composite_frames)}"
+                    f" | BG: {self.background_frame_idx} | [{marked}]")
 
         cv2.putText(canvas, info, (10, 22), cv2.FONT_HERSHEY_SIMPLEX,
                     0.5, (220, 220, 220), 1, cv2.LINE_AA)
-
-        if self.status_message:
-            c = self.status_color
-            cv2.putText(canvas, self.status_message, (10, bar_h + 18),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, c, 1, cv2.LINE_AA)
 
     # ==================================================================
     # Composite
@@ -985,7 +1013,11 @@ class StroboscopicGUI:
             f"建议: --max-dim 640 --process-fps 3"
         )
         if self.panel:
-            self.panel.show_error("内存不足 (OOM)", detail)
+            self._in_modal = True
+            try:
+                self.panel.show_error("内存不足 (OOM)", detail)
+            finally:
+                self._in_modal = False
         self._set_status("内存不足，已有 mask 已保留。请降低参数重试。", "error")
 
     def close(self) -> None:
@@ -1050,11 +1082,11 @@ def _draw_timeline_on_canvas(gui: StroboscopicGUI, canvas: np.ndarray) -> np.nda
     cv2.line(out, (cur_x, y0), (cur_x, y0 + TIMELINE_H), (255, 255, 255), 2)
 
     # 帧号标签
-    cv2.putText(out, f"帧{gui.current_frame_idx}", (cur_x + 4, y0 + TIMELINE_H - 3),
+    cv2.putText(out, f"F{gui.current_frame_idx}", (cur_x + 4, y0 + TIMELINE_H - 3),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1, cv2.LINE_AA)
 
     # 标记帧计数
-    marked_info = f"标记: {len(gui.composite_frames)}"
+    marked_info = f"Marked: {len(gui.composite_frames)}"
     cv2.putText(out, marked_info, (5, y0 + TIMELINE_H - 3),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.35, (200, 200, 200), 1, cv2.LINE_AA)
 
