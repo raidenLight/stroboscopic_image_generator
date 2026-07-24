@@ -625,7 +625,7 @@ class StroboscopicGUI:
                     return
                 # 无物体 → 自动创建；活跃物体已保存 → 自动创建下一个
                 obj = self.active_object()
-                if obj is None or (obj.points and not obj._dirty):
+                if obj is None or (obj.points and obj._saved):
                     self.action("new_object")
                     obj = self.active_object()
                 if obj:
@@ -634,8 +634,9 @@ class StroboscopicGUI:
                         obj.seed_frame = self.current_frame_idx
                     obj.points.append((x, y))
                     obj._dirty = True
+                    obj._saved = False  # 新加点 → 取消已保存状态
                     self._preview_dirty = True
-                    self._show_points_overlay = True  # 新加点时恢复显示
+                    self._show_points_overlay = True
 
     # ==================================================================
     # Frame helpers
@@ -909,7 +910,7 @@ class StroboscopicGUI:
                         self._preview_mask = m
                         self._preview_mask_obj_id = obj.obj_id
                         self._show_points_overlay = False
-                        obj._dirty = False  # 预览成功 → 物体已保存
+                        obj._saved = True   # 预览成功 → 物体已保存，但不影响跟踪标志
                         self._set_status(f"{obj.name} 已保存 | 帧 {self.current_frame_idx}", "success")
                     else:
                         self._preview_mask = None
