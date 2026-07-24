@@ -72,7 +72,7 @@ class ControlPanel:
         # ★ 使用 grid 布局：日志栏和快捷键行设置 minsize 绝对不被压缩，
         # Treeview 行 weight=1 吸收所有弹性压缩
         self.root.grid_columnconfigure(0, weight=1)
-        self.root.grid_rowconfigure(6, weight=1)                    # Treeview — 弹性
+        self.root.grid_rowconfigure(6, weight=1, minsize=145)       # Treeview — 可扩展不可压缩
         self.root.grid_rowconfigure(7, weight=0, minsize=170)       # 日志栏 — 不可压缩
         self.root.grid_rowconfigure(8, weight=0, minsize=48)        # 快捷键 — 不可压缩
 
@@ -147,7 +147,7 @@ class ControlPanel:
         self.btn_restart.pack(side=tk.RIGHT, padx=2)
         r2 = ttk.Frame(bottom)
         r2.pack(fill=tk.X)
-        ttk.Label(r2, text="Enter跟踪  ←→导航  Ctrl+←→跳标记  Tab切换物体  Backspace回退  Esc退出",
+        ttk.Label(r2, text="Enter跟踪  ←→导航  Ctrl+←→跳标记  Tab切换物体  Backspace回退  Esc中止跟踪",
                    font=("", 8)).pack(side=tk.LEFT)
 
     # ==================================================================
@@ -650,7 +650,8 @@ class ControlPanel:
                 return  # 让 Entry 正常处理输入（包括 Enter、Backspace 等）
 
         if key == "Escape":
-            gui.action("quit" if gui.state != GUIState.TRACKING else "abort_tracking")
+            if gui.state == GUIState.TRACKING:
+                gui.action("abort_tracking")
         elif key == "Return":
             # Enter 只在非 Entry 控件时触发跟踪
             if gui.state == GUIState.EDIT and not isinstance(event.widget, ttk.Entry):
