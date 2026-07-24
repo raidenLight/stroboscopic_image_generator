@@ -220,6 +220,7 @@ class StroboscopicGUI:
             obj = self.active_object()
             if obj:
                 obj.points.clear()
+                obj._dirty = True
 
         elif name == "start_tracking":
             if self.state != GUIState.EDIT:
@@ -596,10 +597,13 @@ class StroboscopicGUI:
             return
         if event == cv2.EVENT_LBUTTONDOWN:
             if 0 <= x < self.w and 0 <= y < self.h:
+                # 首次点击：仅关闭引导覆盖层，不添加点
+                if self._show_onboarding:
+                    self._show_onboarding = False
+                    return
                 # 如果无物体，自动创建一个
                 if not self.objects:
                     self.action("new_object")
-                    self._show_onboarding = False
                 obj = self.active_object()
                 if obj:
                     # 第一个点 → 设置 seed_frame
@@ -608,7 +612,6 @@ class StroboscopicGUI:
                     obj.points.append((x, y))
                     obj._dirty = True
                     self._preview_dirty = True
-                    self._show_onboarding = False
 
     # ==================================================================
     # Frame helpers

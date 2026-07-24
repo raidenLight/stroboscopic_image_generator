@@ -36,6 +36,8 @@ class ControlPanel:
         self._last_active_idx: int = -1
         self._last_obj_count: int = -1
         self._last_marked_count: int = -1
+        self._last_overrides_count: int = -1
+        self._last_per_frame_count: int = -1
         self._interval_str = tk.StringVar(value="1.5")
         self._range_start_str = tk.StringVar(value="0")
         self._range_end_str = tk.StringVar(value=str(max(gui.n_frames - 1, 0)))
@@ -183,6 +185,9 @@ class ControlPanel:
 
     # ── Alpha ──
     def _build_alpha_section(self) -> None:
+        # ★ 重建时同步 StringVar 到 model（覆盖 restart 等操作的变化）
+        self._alpha_start_str.set(f"{self.gui.alpha_start:.2f}")
+        self._alpha_end_str.set(f"{self.gui.alpha_end:.2f}")
         r = ttk.Frame(self.alpha_inner)
         r.pack(fill=tk.X)
         ttk.Label(r, text="首帧:").pack(side=tk.LEFT)
@@ -267,18 +272,30 @@ class ControlPanel:
         inner.bind("<MouseWheel>", _wheel)
         cvs.bind("<Enter>", lambda e: cvs.focus_set())
 
+        # ── 列布局: [行选] [帧标签(expand)] [obj1] [obj2]... [α] [✕] ──
+        # Col 0: 行选择框
+        # Col 1: 帧标签 (weight=1)
+        # Col 2..n_objs+1: 物体选择框
+        # Col n_objs+2: alpha
+        # Col n_objs+3: 删除
+        inner.columnconfigure(1, weight=1)  # 帧标签列扩展，吸收空白空间
+
         # ── 头行 ──
+        hdr_row_cb_var = tk.BooleanVar(value=True)
+        hdr_row_cb = ttk.Checkbutton(inner, variable=hdr_row_cb_var,
+                                      command=lambda: self._toggle_all_rows(hdr_row_cb_var.get()))
+        hdr_row_cb.grid(row=0, column=0)
         ttk.Label(inner, text=f"帧 / 时间 ({count})", font=("", 8, "bold"), anchor=tk.W).grid(
-            row=0, column=0, sticky="w")
+            row=0, column=1, sticky="ew")
         for j, obj in enumerate(objs):
             cb_var = tk.BooleanVar(value=True)
             cb = ttk.Checkbutton(inner, variable=cb_var)
-            cb.grid(row=0, column=j + 1)
+            cb.grid(row=0, column=j + 2)
             cb.configure(command=lambda oid=obj.obj_id, v=cb_var: self._toggle_all_frames(oid, v.get()))
             ttk.Label(inner, text=obj.name[:3], foreground=obj.color_hex, font=("", 6)).grid(
-                row=0, column=j + 1, sticky="s", pady=(14, 0))
+                row=0, column=j + 2, sticky="s", pady=(14, 0))
         ttk.Label(inner, text="α", width=4, anchor=tk.CENTER, font=("", 8, "bold")).grid(
-            row=0, column=n_objs + 1)
+            row=0, column=n_objs + 2)
 
         # ── 数据行 ──
         for i, fidx in enumerate(all_rows):
@@ -288,10 +305,20 @@ class ControlPanel:
             is_bg = (fidx == self.gui.background_frame_idx)
             label_text = f" 帧{fidx} {ts}s" + (" [BG]" if is_bg else "")
 
+            # ★ 行选择框（最左边）— 勾选=加入合成帧，取消=移除
+            row_cb_var = tk.BooleanVar(value=True)
+            row_cb = ttk.Checkbutton(inner, variable=row_cb_var,
+                                      command=lambda f=fidx, v=row_cb_var: (
+                                          self.gui.composite_frames.add(f) if v.get()
+                                          else self.gui.composite_frames.discard(f),
+                                          setattr(self.gui, '_preview_dirty', True)
+                                      ))
+            row_cb.grid(row=row, column=0)
+
             lbl = ttk.Label(inner, text=label_text,
                            foreground="#CC6600" if is_bg else "black",
                            font=("", 8, "bold" if is_bg else "normal"))
-            lbl.grid(row=row, column=0, sticky="w")
+            lbl.grid(row=row, column=1, sticky="w")
             # 双击跳转到该帧
             lbl.bind("<Double-1>", lambda e, f=fidx: self._jump_to_frame(f))
 
@@ -302,32 +329,42 @@ class ControlPanel:
                 if has_mask:
                     var = tk.BooleanVar(value=checked)
                     cb = ttk.Checkbutton(inner, variable=var)
-                    cb.grid(row=row, column=j + 1)
+                    cb.grid(row=row, column=j + 2)
                     cb.configure(command=lambda f=fidx, o=obj.obj_id: (
                         setattr(self.gui, '_preview_dirty', True),
                         self.gui.action("toggle_frame_object_at", f, o)
                     ))
                 else:
-                    ttk.Label(inner, text="—", font=("", 7)).grid(row=row, column=j + 1)
+                    ttk.Label(inner, text="—", font=("", 7)).grid(row=row, column=j + 2)
 
             # Alpha
             cur_a = self.gui.get_frame_alpha(fidx)
             a_var = tk.StringVar(value=f"{cur_a:.2f}")
             a_entry = ttk.Entry(inner, width=5, textvariable=a_var, font=("", 8))
-            a_entry.grid(row=row, column=n_objs + 1, padx=1)
+            a_entry.grid(row=row, column=n_objs + 2, padx=1)
             a_entry.bind("<Return>", lambda e, f=fidx: self._apply_frame_alpha(f, e.widget))
 
             # 删除
             ttk.Button(inner, text="✕", width=2, command=lambda f=fidx: (
                 self.gui.composite_frames.discard(f),
                 setattr(self.gui, '_preview_dirty', True)
-            )).grid(row=row, column=n_objs + 2)
+            )).grid(row=row, column=n_objs + 3)
 
     def _jump_to_frame(self, fidx: int) -> None:
         """双击帧列表跳转到该帧。"""
         self.gui.current_frame_idx = fidx
         self.gui._preview_dirty = True
         self.gui._preview_mask = None
+
+    def _toggle_all_rows(self, show: bool) -> None:
+        """行选全选/全不选：切换所有合成帧的标记状态。"""
+        if show:
+            # 全选：恢复所有已有标记帧（无法恢复已删除的帧，因为 composite_frames 是 set）
+            pass  # 已显示的行默认都是 checked，无需操作
+        else:
+            self.gui.composite_frames.clear()
+            self.gui.frame_overrides.clear()
+        self.gui._preview_dirty = True
 
     def _toggle_all_frames(self, obj_id: int, show: bool) -> None:
         for fidx in self.gui.composite_frames:
@@ -350,16 +387,22 @@ class ControlPanel:
     # ==================================================================
     def sync_from_gui(self) -> None:
         gui = self.gui
+        overrides_c = sum(len(v) for v in gui.frame_overrides.values())
+        alpha_c = len(gui.per_frame_alpha)
         need_rebuild = (
             gui.state != self._last_state
             or gui.active_obj_idx != self._last_active_idx
             or len(gui.objects) != self._last_obj_count
             or len(gui.composite_frames) != self._last_marked_count
+            or overrides_c != self._last_overrides_count
+            or alpha_c != self._last_per_frame_count
         )
         if need_rebuild:
             self._rebuild_object_buttons()
             self._build_dynamic()
             self._last_marked_count = len(gui.composite_frames)
+            self._last_overrides_count = overrides_c
+            self._last_per_frame_count = alpha_c
 
         state_text = "跟踪中" if gui.state == GUIState.TRACKING else "编辑"
         self.lbl_state.configure(text=state_text)
@@ -392,11 +435,8 @@ class ControlPanel:
             except tk.TclError:
                 pass
 
-        if gui.state == GUIState.EDIT:
-            if self._alpha_start_str.get() != f"{gui.alpha_start:.2f}":
-                self._alpha_start_str.set(f"{gui.alpha_start:.2f}")
-            if self._alpha_end_str.get() != f"{gui.alpha_end:.2f}":
-                self._alpha_end_str.set(f"{gui.alpha_end:.2f}")
+        # ★ Alpha StringVar 只在程序修改时更新，不在每帧 sync 中覆盖用户输入
+        # Alpha 值变化由 _apply_alpha_gradient / restart 等 action 通过重建 UI 来反映
 
     def _rebuild_object_buttons(self) -> None:
         for w in self.obj_grid_frame.winfo_children(): w.destroy()
