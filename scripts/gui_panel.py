@@ -333,23 +333,23 @@ class ControlPanel:
                             selectmode="browse", height=8)
 
         # Col 0: 行选框
-        tree.heading("row", text="")  # 无文字
-        tree.column("row", width=28, anchor=tk.CENTER, stretch=False)
+        tree.heading("row", text="")
+        tree.column("row", width=24, anchor=tk.CENTER, stretch=False, minwidth=24)
         # Col 1: 帧标签 (expand)
         tree.heading("frame", text=f"帧 / 时间 ({len(frames)})")
-        tree.column("frame", width=130, anchor=tk.W, stretch=True)
-        # Col 2..n+1: 物体列（列头可点击全选/全不选）
+        tree.column("frame", width=130, anchor=tk.W, stretch=True, minwidth=80)
+        # Col 2..n+1: 物体列
         for obj in objs:
             col = f"obj_{obj.obj_id}"
-            tree.heading(col, text=f"☑ {obj.name[:3]}",
+            tree.heading(col, text=f"☑ {obj.name[:2]}",
                          command=lambda oid=obj.obj_id: self._col_toggle_all(tree, oid))
-            tree.column(col, width=38, anchor=tk.CENTER, stretch=False)
+            tree.column(col, width=34, anchor=tk.CENTER, stretch=False, minwidth=30)
         # Alpha
         tree.heading("alpha", text="α")
-        tree.column("alpha", width=50, anchor=tk.CENTER, stretch=False)
+        tree.column("alpha", width=46, anchor=tk.CENTER, stretch=False, minwidth=40)
         # 删除
         tree.heading("del", text="")
-        tree.column("del", width=26, anchor=tk.CENTER, stretch=False)
+        tree.column("del", width=24, anchor=tk.CENTER, stretch=False, minwidth=22)
 
         # Scrollbar
         sb = ttk.Scrollbar(self.marked_inner, orient=tk.VERTICAL, command=tree.yview)
