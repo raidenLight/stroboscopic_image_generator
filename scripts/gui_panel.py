@@ -340,15 +340,15 @@ class ControlPanel:
         # Col 0: 行选框
         tree.heading("row", text="")
         tree.column("row", width=24, anchor=tk.CENTER, stretch=False, minwidth=24)
-        # Col 1: 帧标签 (expand)
+        # Col 1: 帧标签
         tree.heading("frame", text=f"帧 / 时间 ({len(frames)})")
-        tree.column("frame", width=130, anchor=tk.W, stretch=True, minwidth=80)
+        tree.column("frame", width=120, anchor=tk.W, stretch=True, minwidth=80)
         # Col 2..n+1: 物体列
         for obj in objs:
             col = f"obj_{obj.obj_id}"
-            tree.heading(col, text=f"☑ {obj.name[:2]}",
+            tree.heading(col, text=f"☑ {obj.name}",
                          command=lambda oid=obj.obj_id: self._col_toggle_all(tree, oid))
-            tree.column(col, width=34, anchor=tk.CENTER, stretch=False, minwidth=30)
+            tree.column(col, width=42, anchor=tk.CENTER, stretch=False, minwidth=36)
         # Alpha
         tree.heading("alpha", text="α")
         tree.column("alpha", width=46, anchor=tk.CENTER, stretch=False, minwidth=40)
