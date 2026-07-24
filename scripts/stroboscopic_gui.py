@@ -528,6 +528,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--vos-optimized", action="store_true")
     parser.add_argument("--offload-video-to-cpu", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--offload-state-to-cpu", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--max-dim", type=int, default=1280,
+                        help="Max frame dimension in pixels. Resize longer side to this limit. "
+                             "Lower = less RAM/VRAM. (default: 1280, use 720 or 960 if OOM)")
 
     args = parser.parse_args()
     if not 0.0 <= args.alpha <= 1.0:
@@ -1244,6 +1247,51 @@ def _draw_timeline_on_canvas(gui: StroboscopicGUI, canvas: np.ndarray) -> np.nda
 
 
 # ===================================================================
+# Video resize helper
+# ===================================================================
+def maybe_resize_video(src_video: Path, max_dim: int, tmp_dir: Path) -> tuple[Path, int, int]:
+    """Resize video frames so the longer side ≤ max_dim. Returns (new_path, w, h)."""
+    cap = cv2.VideoCapture(str(src_video))
+    if not cap.isOpened():
+        raise RuntimeError(f"Cannot open video for resize: {src_video}")
+
+    src_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    src_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    src_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    long_side = max(src_w, src_h)
+
+    if long_side <= max_dim:
+        cap.release()
+        return src_video, src_w, src_h  # no resize needed
+
+    # Compute new dimensions preserving aspect ratio
+    scale = max_dim / long_side
+    new_w = int(src_w * scale)
+    new_h = int(src_h * scale)
+    # Ensure even dimensions (some codecs require this)
+    new_w = new_w - (new_w % 2)
+    new_h = new_h - (new_h % 2)
+
+    out_path = tmp_dir / f"{src_video.stem}_resized_{new_w}x{new_h}.mp4"
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    writer = cv2.VideoWriter(str(out_path), fourcc, src_fps, (new_w, new_h))
+    if not writer.isOpened():
+        cap.release()
+        raise RuntimeError(f"Cannot open writer for resized video: {out_path}")
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        writer.write(resized)
+
+    cap.release()
+    writer.release()
+    return out_path, new_w, new_h
+
+
+# ===================================================================
 # main()
 # ===================================================================
 def main() -> None:
@@ -1258,9 +1306,16 @@ def main() -> None:
     print("First run will download ~150MB model from HuggingFace to local cache.")
 
     with tempfile.TemporaryDirectory(prefix="sam2_gui_") as tmp_dir:
+        # Step 1: optional FPS downsampling
         processing_video, source_fps, was_downsampled = maybe_downsample_video(
             src_video=args.video, target_fps=args.process_fps, tmp_dir=Path(tmp_dir),
         )
+
+        # Step 2: optional spatial resize (reduces RAM usage dramatically)
+        processing_video, vid_w, vid_h = maybe_resize_video(
+            processing_video, args.max_dim, Path(tmp_dir),
+        )
+
         cap = cv2.VideoCapture(str(processing_video))
         if not cap.isOpened():
             raise RuntimeError(f"Cannot open video: {processing_video}")
@@ -1268,16 +1323,30 @@ def main() -> None:
         try:
             fps = cap.get(cv2.CAP_PROP_FPS) or source_fps or 30.0
             n_frames = get_frame_count(cap)
-            print(f"Frames: {n_frames}, FPS: {fps:.2f}")
+            n_frames_mb = n_frames * vid_w * vid_h * 4 / (1024 * 1024)  # float32 RAM estimate
+            print(f"Frames: {n_frames}, FPS: {fps:.2f}, Resolution: {vid_w}x{vid_h}")
+            print(f"Estimated RAM for frames: ~{n_frames_mb:.0f} MB")
             if was_downsampled:
-                print(f"Downsampled: {source_fps:.2f} → {fps:.2f}")
+                print(f"Temporal downsampling: {source_fps:.2f} → {fps:.2f}")
 
             device = resolve_device(args.device)
             predictor = build_predictor(args, device=device)
             gui = StroboscopicGUI(cap, predictor, processing_video,
                                   n_frames, fps, args, Path(tmp_dir))
             with sam_inference_context(device):
-                gui.run()
+                try:
+                    gui.run()
+                except RuntimeError as e:
+                    msg = str(e)
+                    if "not enough memory" in msg or "OutOfMemory" in msg or "CUDA error" in msg:
+                        print("\n" + "=" * 60)
+                        print("MEMORY ERROR — try these options:")
+                        print("  1. Lower --max-dim (e.g., --max-dim 720 or --max-dim 640)")
+                        print("  2. Lower --process-fps (e.g., --process-fps 3)")
+                        print("  3. Use a smaller model: --hf-model-id facebook/sam2.1-hiera-tiny")
+                        print("  4. Use CPU only: --device cpu (much slower but less VRAM)")
+                        print("=" * 60)
+                    raise
         finally:
             cap.release()
             cv2.destroyAllWindows()
