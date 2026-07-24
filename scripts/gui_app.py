@@ -1108,7 +1108,7 @@ class StroboscopicGUI:
 
 
 # ===================================================================
-# Timeline drawer (enhanced: 60px, 3 layers)
+# Timeline drawer (60px, 2 layers: frame状态 + 指示器)
 # ===================================================================
 def _draw_timeline_on_canvas(gui: StroboscopicGUI, canvas: np.ndarray) -> np.ndarray:
     h, w = canvas.shape[:2]
@@ -1117,51 +1117,35 @@ def _draw_timeline_on_canvas(gui: StroboscopicGUI, canvas: np.ndarray) -> np.nda
     out[:h, :] = canvas
     y0 = h
 
-    # ── Layer 1 (top 10px): object visibility range bars ──
-    bar_h = TIMELINE_H // 3 - 1
-    for obj in gui.objects:
-        start = obj.vis_start if obj.vis_start is not None else 0
-        end = obj.vis_end if obj.vis_end is not None else n - 1
-        x1 = int(w * start / max(n, 1))
-        x2 = int(w * (end + 1) / max(n, 1))
-        b, g, r = int(obj.color[0]), int(obj.color[1]), int(obj.color[2])
-        cv2.rectangle(out, (x1, y0 + 1), (x2, y0 + 1 + bar_h), (b, g, r), -1)
-
-    # ── Layer 2 (middle 24px): per-frame status ──
-    mid_y0 = y0 + bar_h + 2
-    mid_h = TIMELINE_H - bar_h - 16
+    # ── 帧状态条 ──
+    bar_h = TIMELINE_H - 16
     for fidx in range(n):
         x_start = int(w * fidx / max(n, 1))
         x_end = int(w * (fidx + 1) / max(n, 1))
         x_end = max(x_end, x_start + 1)
-
         if fidx in gui.composite_frames:
-            color = (0, 200, 80)  # 绿：标记
+            color = (0, 200, 80)    # 绿：标记
         elif fidx in gui.masks and gui.masks[fidx]:
-            color = (60, 60, 60)   # 深灰：有 mask
+            color = (60, 60, 60)    # 深灰：有mask
         else:
-            color = (40, 40, 40)   # 灰：空
-        cv2.rectangle(out, (x_start, mid_y0), (x_end, mid_y0 + mid_h), color, -1)
+            color = (40, 40, 40)    # 灰：空
+        cv2.rectangle(out, (x_start, y0 + 1), (x_end, y0 + 1 + bar_h), color, -1)
 
     # 标记帧的绿色三角
     for fidx in sorted(gui.composite_frames):
         tri_x = int(w * (fidx + 0.5) / max(n, 1))
-        tri_y = mid_y0
+        tri_y = y0 + 1
         pts = np.array([[tri_x - 3, tri_y], [tri_x + 3, tri_y], [tri_x, tri_y + 5]], np.int32)
         cv2.fillPoly(out, [pts], (0, 255, 0))
 
-    # ── Layer 3 (bottom 14px): indicators ──
-    btm_y = mid_y0 + mid_h
-
-    # 背景指示器（橙色）
+    # ── 指示器 ──
     bg_x = int(w * gui.background_frame_idx / max(n, 1))
     cv2.line(out, (bg_x, y0), (bg_x, y0 + TIMELINE_H), (255, 150, 50), 2)
 
-    # 当前位置（白色）
     cur_x = int(w * (gui.current_frame_idx + 0.5) / max(n, 1))
     cv2.line(out, (cur_x, y0), (cur_x, y0 + TIMELINE_H), (255, 255, 255), 2)
 
-    # 帧号标签（避免与播放按钮重叠）
+    # 帧号标签
     label_x = max(cur_x + 4, 26)
     cv2.putText(out, f"F{gui.current_frame_idx}", (label_x, y0 + TIMELINE_H - 3),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1, cv2.LINE_AA)
@@ -1173,16 +1157,21 @@ def _draw_timeline_on_canvas(gui: StroboscopicGUI, canvas: np.ndarray) -> np.nda
                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1, cv2.LINE_AA)
 
     # ── 播放/暂停按钮（左下角，方形）──
-    bx, by = 4, y0 + bar_h + mid_h - 1
-    bw, bh = 18, 18
-    cv2.rectangle(out, (bx, by), (bx + bw, by + bh), (80, 80, 80), -1)
-    cv2.rectangle(out, (bx, by), (bx + bw, by + bh), (180, 180, 180), 1)
+    bx, by = 2, y0
+    bw, bh = 25, 25
+    cv2.rectangle(out, (bx, by), (bx + bw, by + bh), (60, 60, 60), -1)
+    cv2.rectangle(out, (bx, by), (bx + bw, by + bh), (160, 160, 160), 1)
     if gui._playing:
-        cv2.rectangle(out, (bx + 4, by + 3), (bx + 7, by + bh - 4), (220, 220, 220), -1)
-        cv2.rectangle(out, (bx + 11, by + 3), (bx + 14, by + bh - 4), (220, 220, 220), -1)
+        cv2.rectangle(out, (bx + 7, by + 7), (bx + 11, by + bh - 7), (220, 220, 220), -1)
+        cv2.rectangle(out, (bx + 15, by + 7), (bx + 19, by + bh - 7), (220, 220, 220), -1)
     else:
-        pts = np.array([[bx + 5, by + 3], [bx + 5, by + bh - 4], [bx + 14, by + bh // 2]], np.int32)
+        pts = np.array([[bx + 8, by + 7], [bx + 8, by + bh - 7], [bx + 18, by + bh // 2]], np.int32)
         cv2.fillPoly(out, [pts], (180, 220, 180))
     gui._play_btn_rect = (bx, by, bw, bh)
+
+    # 帧号标签（避免与播放按钮重叠）
+    label_x = max(cur_x + 4, 30)
+    cv2.putText(out, f"F{gui.current_frame_idx}", (label_x, y0 + TIMELINE_H - 3),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1, cv2.LINE_AA)
 
     return out
