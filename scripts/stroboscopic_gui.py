@@ -642,11 +642,12 @@ class StroboscopicGUI:
                     self.status_timer = 180
                     self._tracking_generator = None
                     self.masks.clear()
-                    # 清理可能残留的 SAM2 显存
+                    # OOM 时帧缓存可能已损坏，完全释放
                     if self.inference_state is not None:
                         with contextlib.suppress(Exception):
                             self.predictor.reset_state(self.inference_state)
                         self.inference_state = None
+                    self.state = GUIState.SETUP
                     self.state = GUIState.SETUP
                     if self.panel:
                         mem_mb = self.n_frames * self.w * self.h * 4 / (1024 * 1024)
@@ -663,13 +664,13 @@ class StroboscopicGUI:
             if self.state == GUIState.TRACKING:
                 self._tracking_generator = None
                 self.masks.clear()
-                # 释放 SAM2 显存
+                # 注意：不释放 inference_state，保留已加载的视频帧以便重新跟踪时复用
+                # 只需 reset_state 清理跟踪数据（不清除帧缓存）
                 if self.inference_state is not None:
                     with contextlib.suppress(Exception):
                         self.predictor.reset_state(self.inference_state)
-                    self.inference_state = None
                 self.state = GUIState.SETUP
-                self.status_message = "跟踪已中止，显存已释放。"
+                self.status_message = "跟踪已中止，可重新选点开始。"
                 self.status_timer = 60
         elif name == "mark_frame":
             if self.state == GUIState.SELECTION:
@@ -969,15 +970,20 @@ class StroboscopicGUI:
     def _start_tracking(self) -> None:
         self.masks.clear()
         self.state = GUIState.TRACKING
-        self.status_message = "Initializing SAM2..."
 
-        self.inference_state = self.predictor.init_state(
-            video_path=str(self.video_path),
-            offload_video_to_cpu=self.args.offload_video_to_cpu,
-            offload_state_to_cpu=self.args.offload_state_to_cpu,
-        )
+        # 复用已加载的视频帧，避免重复 init_state 导致内存翻倍
+        if self.inference_state is not None:
+            self.predictor.reset_state(self.inference_state)
+            self.status_message = "重新跟踪中（复用已加载帧）..."
+        else:
+            self.status_message = "加载视频帧到内存..."
+            self.inference_state = self.predictor.init_state(
+                video_path=str(self.video_path),
+                offload_video_to_cpu=self.args.offload_video_to_cpu,
+                offload_state_to_cpu=self.args.offload_state_to_cpu,
+            )
 
-        # Register all objects at their seed frames
+        # 为每个有点的物体注册种子
         objects_with_points = [o for o in self.objects if o.points]
         for obj in objects_with_points:
             points_np = np.array(obj.points, dtype=np.float32)
