@@ -42,8 +42,8 @@ class ControlPanel:
         self._interval_str = tk.StringVar(value="1.5")
         self._range_start_str = tk.StringVar(value="0")
         self._range_end_str = tk.StringVar(value=str(max(gui.n_frames - 1, 0)))
-        self._alpha_start_str = tk.StringVar(value=f"{gui.args.alpha:.2f}")
-        self._alpha_end_str = tk.StringVar(value=f"{gui.args.alpha:.2f}")
+        self._alpha_start_str = tk.StringVar(value="1.00")
+        self._alpha_end_str = tk.StringVar(value="1.00")
 
         self._build_static()
         self._build_dynamic()
@@ -182,9 +182,6 @@ class ControlPanel:
             btn = tk.Button(r, text="▶ 跟踪", bg="#cccccc", fg="#888888",
                             font=("", 9), relief=tk.FLAT, state=tk.DISABLED)
         btn.pack(side=tk.LEFT, padx=1, fill=tk.X, expand=True, ipady=2)
-        ttk.Button(r, text="💾 保存 (S)", command=lambda: self.gui.action("save")).pack(
-            side=tk.LEFT, padx=1, fill=tk.X, expand=True)
-
         # 选点模式切换按钮（第二行）
         r2 = ttk.Frame(self.actions_inner)
         r2.pack(fill=tk.X, pady=(2, 0))

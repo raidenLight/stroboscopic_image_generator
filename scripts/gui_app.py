@@ -97,8 +97,8 @@ class StroboscopicGUI:
         self._data_version: int = 0                 # 数据变更版本号，触发面板重建
 
         # ── Alpha：渐变 + 逐帧覆盖 ──
-        self.alpha_start: float = args.alpha
-        self.alpha_end: float = args.alpha
+        self.alpha_start: float = 1.0
+        self.alpha_end: float = 1.0
         self.per_frame_alpha: dict[int, float] = {}
 
         # ── 选点模式 ──
@@ -404,8 +404,8 @@ class StroboscopicGUI:
             self._show_points_overlay = True
             self._point_mode_active = True
             self.per_frame_alpha.clear()
-            self.alpha_start = self.args.alpha
-            self.alpha_end = self.args.alpha
+            self.alpha_start = 1.0
+            self.alpha_end = 1.0
             self.state = GUIState.EDIT
             self._set_status("已重新开始。", "info")
 
