@@ -22,7 +22,7 @@ class ControlPanel:
         self.root.title("控制面板 — 频闪图像生成器")
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.resizable(True, True)
-        self.root.minsize(360, 640)
+        self.root.minsize(360, 720)
         self.root.geometry(f"{PANEL_WIDTH}x{PANEL_HEIGHT}+50+50")
         self.root.bind_all("<Key>", self._on_tk_key)
         # 初始化时短暂置顶，确保面板不被 OpenCV 窗口遮挡
@@ -69,12 +69,11 @@ class ControlPanel:
     # 静态控件（只创建一次）
     # ==================================================================
     def _build_static(self) -> None:
-        # ★ 使用 grid 布局：日志栏和快捷键行设置 minsize 绝对不被压缩，
-        # Treeview 行 weight=1 吸收所有弹性压缩
+        # ★ 合成帧:日志:快捷键 = 3:2:1 固定比例，仅合成帧可弹性扩展
         self.root.grid_columnconfigure(0, weight=1)
-        self.root.grid_rowconfigure(6, weight=1, minsize=150)       # Treeview — 可扩展不可压缩
-        self.root.grid_rowconfigure(7, weight=0, minsize=120)       # 日志栏 — 不可压缩
-        self.root.grid_rowconfigure(8, weight=0, minsize=48)        # 快捷键 — 不可压缩
+        self.root.grid_rowconfigure(6, weight=1, minsize=234)       # Treeview — 3 份
+        self.root.grid_rowconfigure(7, weight=0, minsize=156)       # 日志栏 — 2 份
+        self.root.grid_rowconfigure(8, weight=0, minsize=78)        # 快捷键 — 1 份
 
         # ── 状态（Row 0）──
         frm = ttk.LabelFrame(self.root, text="状态", padding=3)
