@@ -377,11 +377,12 @@ class ControlPanel:
             self.lbl_active.configure(text="Active: —")
 
         # Button highlights for object buttons
+        # Note: tk.Button uses bg/relief/font, NOT style (style is ttk-only)
         for i, btn in enumerate(getattr(self, '_obj_btns', [])):
             if i == gui.active_obj_idx:
-                btn.configure(style="Accent.TButton" if hasattr(self, '_accent_style') else "")
+                btn.configure(bg="white", relief=tk.RAISED, font=("", 9, "bold"))
             else:
-                btn.configure(style="TButton")
+                btn.configure(bg="#e0e0e0", relief=tk.FLAT, font=("", 9))
 
         # Sync view radio
         self.view_var.set(gui.viz_mode)
@@ -757,9 +758,10 @@ class StroboscopicGUI:
                     break
 
                 key_raw = cv2.waitKeyEx(20)
-                key = key_raw & 0xFF
-                self._last_key_raw = key_raw
-                self._handle_keyboard(key, key_raw)
+                if key_raw >= 0:  # -1 = no key pressed (timeout)
+                    key = key_raw & 0xFF
+                    self._last_key_raw = key_raw
+                    self._handle_keyboard(key, key_raw)
 
                 # Dispatch by state
                 if self.state == GUIState.SETUP:
