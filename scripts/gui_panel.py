@@ -196,6 +196,8 @@ class ControlPanel:
         self._threshold_str = tk.StringVar(value="0.20")
         ttk.Entry(self.view_inner, textvariable=self._threshold_str, width=4).pack(side=tk.LEFT, padx=2)
         ttk.Button(self.view_inner, text="✓", width=2, command=self._apply_threshold).pack(side=tk.LEFT)
+        ttk.Separator(self.view_inner, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=4)
+        ttk.Button(self.view_inner, text="💾 保存", command=lambda: self.gui.action("save")).pack(side=tk.LEFT, padx=4)
 
     def _apply_threshold(self):
         try:

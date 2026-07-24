@@ -1038,12 +1038,20 @@ class StroboscopicGUI:
         return preview.copy()
 
     def _composite_and_save(self) -> str:
+        from pathlib import Path
         out_img = self._render_composite()
-        self.args.out.parent.mkdir(parents=True, exist_ok=True)
-        cv2.imwrite(str(self.args.out), out_img)
-        file_size = self.args.out.stat().st_size / 1024
+        # 以原视频文件名命名，重名则后缀 +1
+        out_dir = Path(self.video_path).parent
+        base = Path(self.video_path).stem + "_stroboscopic"
+        out_path = out_dir / f"{base}.png"
+        n = 1
+        while out_path.exists():
+            out_path = out_dir / f"{base}_{n}.png"
+            n += 1
+        cv2.imwrite(str(out_path), out_img)
+        file_size = out_path.stat().st_size / 1024
         return (
-            f"已保存到: {self.args.out}\n"
+            f"已保存到: {out_path}\n"
             f"合成帧数: {len(self.composite_frames)}\n"
             f"物体数: {len(self.objects)}\n"
             f"文件大小: {file_size:.1f} KB"
