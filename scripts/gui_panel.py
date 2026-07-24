@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from gui_app import StroboscopicGUI
 
 PANEL_WIDTH = 400
-PANEL_HEIGHT = 720
+PANEL_HEIGHT = 600
 
 
 class ControlPanel:
@@ -27,7 +27,6 @@ class ControlPanel:
         self.root.lift()
         self.root.after(3000, lambda: self.root.attributes("-topmost", False))
         self.root.bind("<Key>", self._on_tk_key)
-        self.root.bind("<MouseWheel>", self._on_mousewheel)
 
         style = ttk.Style(self.root)
         style.theme_use("clam")
@@ -45,84 +44,65 @@ class ControlPanel:
         self.root.update()
 
     # ==================================================================
-    # 静态控件 (始终存在)
+    # 静态控件
     # ==================================================================
     def _build_static(self) -> None:
-        # ── 状态 ──
-        frm = ttk.LabelFrame(self.root, text="状态", padding=5)
-        frm.pack(fill=tk.X, padx=5, pady=2)
+        # ── 状态（固定顶部）──
+        frm = ttk.LabelFrame(self.root, text="状态", padding=3)
+        frm.pack(fill=tk.X, padx=3, pady=1)
         self.lbl_state = ttk.Label(frm, text="编辑", font=("", 10, "bold"))
         self.lbl_state.pack(anchor=tk.W)
-        self.lbl_frame = ttk.Label(frm, text="帧: 0 / 0")
-        self.lbl_frame.pack(anchor=tk.W)
-        self.lbl_active = ttk.Label(frm, text="活跃: —")
-        self.lbl_active.pack(anchor=tk.W)
+        lf = ttk.Frame(frm)
+        lf.pack(fill=tk.X)
+        self.lbl_frame = ttk.Label(lf, text="帧: 0 / 0")
+        self.lbl_frame.pack(side=tk.LEFT)
+        self.lbl_active = ttk.Label(lf, text="活跃: —")
+        self.lbl_active.pack(side=tk.RIGHT)
 
         # ── 物体 ──
-        self.frm_objects = ttk.LabelFrame(self.root, text="物体", padding=5)
-        self.frm_objects.pack(fill=tk.X, padx=5, pady=2)
+        self.frm_objects = ttk.LabelFrame(self.root, text="物体", padding=3)
+        self.frm_objects.pack(fill=tk.X, padx=3, pady=1)
         self.obj_grid_frame = ttk.Frame(self.frm_objects)
         self.obj_grid_frame.pack(fill=tk.X)
-        self.btn_new_obj = ttk.Button(
-            self.frm_objects, text="+ 新建物体 (N)",
-            command=lambda: self.gui.action("new_object"))
-        self.btn_new_obj.pack(fill=tk.X, pady=2)
+        self.btn_new_obj = ttk.Button(self.frm_objects, text="+ 新建物体 (N)",
+                                       command=lambda: self.gui.action("new_object"))
+        self.btn_new_obj.pack(fill=tk.X, pady=1)
 
         # ── 操作 ──
-        self.frm_actions = ttk.LabelFrame(self.root, text="操作", padding=5)
-        self.frm_actions.pack(fill=tk.X, padx=5, pady=2)
+        self.frm_actions = ttk.LabelFrame(self.root, text="操作", padding=3)
+        self.frm_actions.pack(fill=tk.X, padx=3, pady=1)
         self.actions_inner = ttk.Frame(self.frm_actions)
         self.actions_inner.pack(fill=tk.X)
 
+        # ── 视图 + 帧选取（合并一行）──
+        self.frm_tools = ttk.LabelFrame(self.root, text="视图 & 帧选取", padding=3)
+        self.frm_tools.pack(fill=tk.X, padx=3, pady=1)
+        self.tools_inner = ttk.Frame(self.frm_tools)
+        self.tools_inner.pack(fill=tk.X)
+
         # ── Alpha ──
-        self.frm_alpha = ttk.LabelFrame(self.root, text="Alpha 设置", padding=5)
-        self.frm_alpha.pack(fill=tk.X, padx=5, pady=2)
+        self.frm_alpha = ttk.LabelFrame(self.root, text="Alpha 渐变", padding=3)
+        self.frm_alpha.pack(fill=tk.X, padx=3, pady=1)
         self.alpha_inner = ttk.Frame(self.frm_alpha)
         self.alpha_inner.pack(fill=tk.X)
 
-        # ── 帧选取 ──
-        self.frm_framesel = ttk.LabelFrame(self.root, text="帧选取", padding=5)
-        self.frm_framesel.pack(fill=tk.X, padx=5, pady=2)
-        self.framesel_inner = ttk.Frame(self.frm_framesel)
-        self.framesel_inner.pack(fill=tk.X)
-
-        # ── 合成帧列表 ──
-        self.frm_marked = ttk.LabelFrame(self.root, text="合成帧", padding=5)
-        self.frm_marked.pack(fill=tk.X, padx=5, pady=2)
+        # ── 合成帧列表（展开占满剩余空间）──
+        self.frm_marked = ttk.LabelFrame(self.root, text="合成帧", padding=3)
+        self.frm_marked.pack(fill=tk.BOTH, expand=True, padx=3, pady=1)
         self.marked_inner = ttk.Frame(self.frm_marked)
-        self.marked_inner.pack(fill=tk.X)
-
-        # ── 视图 ──
-        self.frm_view = ttk.LabelFrame(self.root, text="视图", padding=5)
-        self.frm_view.pack(fill=tk.X, padx=5, pady=2)
-        self.view_var = tk.StringVar(value="mask")
-        view_inner = ttk.Frame(self.frm_view)
-        view_inner.pack(fill=tk.X)
-        for mode, label in [("mask", "Mask覆盖"), ("composite", "合成预览"), ("original", "原始帧")]:
-            ttk.Radiobutton(
-                view_inner, text=label, variable=self.view_var, value=mode,
-                command=lambda m=mode: self.gui.action("view_" + m),
-            ).pack(side=tk.LEFT, padx=3)
+        self.marked_inner.pack(fill=tk.BOTH, expand=True)
 
         # ── 可见范围 ──
-        self.frm_vis = ttk.LabelFrame(self.root, text="可见范围", padding=5)
+        self.frm_vis = ttk.LabelFrame(self.root, text="可见范围", padding=3)
 
-        # ── 快捷键 ──
-        frm_keys = ttk.LabelFrame(self.root, text="快捷键", padding=5)
-        frm_keys.pack(fill=tk.X, padx=5, pady=2)
-        ttk.Label(frm_keys, text="←→ 导航 | Ctrl+←→ 跳标记帧 | P 预览",
-                   font=("", 8)).pack(anchor=tk.W)
-        ttk.Label(frm_keys, text="N 新建 | 1-9 选物体 | Del 删 | Backspace 删点",
-                   font=("", 8)).pack(anchor=tk.W)
-        ttk.Label(frm_keys, text="K 标记帧 | I 间隔 | R 范围 | B 背景 | V 视图 | S 保存",
-                   font=("", 8)).pack(anchor=tk.W)
-
-        # ── 底部 ──
+        # ── 底部（固定）──
         bottom = ttk.Frame(self.root)
-        bottom.pack(fill=tk.X, padx=5, pady=5)
+        bottom.pack(fill=tk.X, padx=3, pady=2)
+        ttk.Label(bottom, text="K标记 | I间隔 | R范围 | B背景 | V视图 | ←→导航",
+                   font=("", 7)).pack(side=tk.LEFT, anchor=tk.S)
         self.btn_restart = ttk.Button(bottom, text="↺ 重置全部",
                                        command=lambda: self.gui.action("restart"))
-        self.btn_restart.pack(side=tk.LEFT, padx=2)
+        self.btn_restart.pack(side=tk.RIGHT, padx=2)
         ttk.Button(bottom, text="退出 (Esc)",
                    command=lambda: self.gui.action("quit")).pack(side=tk.RIGHT, padx=2)
 
@@ -135,8 +115,8 @@ class ControlPanel:
         self._last_obj_count = len(self.gui.objects)
 
         for w in self.actions_inner.winfo_children(): w.destroy()
+        for w in self.tools_inner.winfo_children(): w.destroy()
         for w in self.alpha_inner.winfo_children(): w.destroy()
-        for w in self.framesel_inner.winfo_children(): w.destroy()
         for w in self.marked_inner.winfo_children(): w.destroy()
 
         if self.gui.state == GUIState.TRACKING:
@@ -144,8 +124,8 @@ class ControlPanel:
             self._build_vis_range(editable=False)
         else:
             self._build_edit_actions()
+            self._build_tools_section()
             self._build_alpha_section()
-            self._build_frame_selection()
             self._build_marked_list()
             self._build_vis_range(editable=True)
 
@@ -153,39 +133,58 @@ class ControlPanel:
     def _build_edit_actions(self) -> None:
         r = ttk.Frame(self.actions_inner)
         r.pack(fill=tk.X)
-        ttk.Button(r, text="👁 预览 (P)", command=lambda: self.gui.action("preview_frame")).pack(side=tk.LEFT, padx=2)
-        ttk.Button(r, text="✕ 清除选点 (Backspace)", command=lambda: self.gui.action("clear_points")).pack(side=tk.LEFT, padx=2)
+        ttk.Button(r, text="👁 预览 (P)", command=lambda: self.gui.action("preview_frame")).pack(side=tk.LEFT, padx=1)
+        ttk.Button(r, text="✕ 清点 (Backspace)", command=lambda: self.gui.action("clear_points")).pack(side=tk.LEFT, padx=1)
 
         dirty = [o for o in self.gui.objects if o._dirty and o.points]
         if dirty:
-            btn = tk.Button(self.actions_inner,
-                            text=f"▶ 开始跟踪 ({len(dirty)} 物体待追踪)",
-                            bg="#4CAF50", fg="white", font=("", 10, "bold"),
-                            relief=tk.RAISED, command=lambda: self.gui.action("start_tracking"))
+            btn = tk.Button(self.actions_inner, text=f"▶ 开始跟踪 ({len(dirty)} 物体)", bg="#4CAF50",
+                            fg="white", font=("", 10, "bold"), relief=tk.RAISED,
+                            command=lambda: self.gui.action("start_tracking"))
         else:
-            btn = tk.Button(self.actions_inner, text="▶ 开始跟踪",
-                            bg="#cccccc", fg="#888888", font=("", 10),
-                            relief=tk.FLAT, state=tk.DISABLED)
-        btn.pack(fill=tk.X, pady=4, ipady=4)
+            btn = tk.Button(self.actions_inner, text="▶ 开始跟踪", bg="#cccccc", fg="#888888",
+                            font=("", 10), relief=tk.FLAT, state=tk.DISABLED)
+        btn.pack(fill=tk.X, pady=2, ipady=2)
 
-    # ── Alpha 区域 ──
+    # ── 视图 + 帧选取 ──
+    def _build_tools_section(self) -> None:
+        # 视图单选
+        self.view_var = tk.StringVar(value=self.gui.viz_mode)
+        vf = ttk.Frame(self.tools_inner)
+        vf.pack(fill=tk.X, pady=1)
+        for mode, label in [("mask", "Mask"), ("composite", "合成"), ("original", "原图")]:
+            ttk.Radiobutton(vf, text=label, variable=self.view_var, value=mode,
+                            command=lambda m=mode: self.gui.action("view_" + m)).pack(side=tk.LEFT, padx=2)
+
+        # 标记 + 范围 + 背景 (一行)
+        sf = ttk.Frame(self.tools_inner)
+        sf.pack(fill=tk.X, pady=1)
+        self._mark_btn = ttk.Button(sf, text="K 标记", command=lambda: self.gui.action("mark_frame"))
+        self._mark_btn.pack(side=tk.LEFT, padx=1, fill=tk.X, expand=True)
+        ttk.Button(sf, text="B 背景", command=lambda: self.gui.action("set_bg")).pack(side=tk.LEFT, padx=1, fill=tk.X, expand=True)
+        ttk.Button(sf, text="R 范围", command=lambda: self.gui.action("range_select")).pack(side=tk.LEFT, padx=1, fill=tk.X, expand=True)
+
+        # 间隔
+        intf = ttk.Frame(self.tools_inner)
+        intf.pack(fill=tk.X, pady=1)
+        ttk.Label(intf, text="间隔(秒):").pack(side=tk.LEFT)
+        ttk.Entry(intf, textvariable=self._interval_str, width=5).pack(side=tk.LEFT, padx=2)
+        ttk.Button(intf, text="应用 (I)", command=lambda: self.gui.action("apply_interval")).pack(side=tk.LEFT, padx=2)
+
+    # ── Alpha ──
     def _build_alpha_section(self) -> None:
-        r1 = ttk.Frame(self.alpha_inner)
-        r1.pack(fill=tk.X, pady=1)
-        ttk.Label(r1, text="起始:", width=5).pack(side=tk.LEFT)
-        e1 = ttk.Entry(r1, textvariable=self._alpha_start_str, width=6)
+        r = ttk.Frame(self.alpha_inner)
+        r.pack(fill=tk.X)
+        ttk.Label(r, text="首帧:").pack(side=tk.LEFT)
+        e1 = ttk.Entry(r, textvariable=self._alpha_start_str, width=5)
         e1.pack(side=tk.LEFT, padx=2)
         e1.bind("<Return>", lambda e: self._apply_alpha("set_alpha_start", self._alpha_start_str))
-
-        ttk.Label(r1, text="  结束:", width=5).pack(side=tk.LEFT, padx=(6, 0))
-        e2 = ttk.Entry(r1, textvariable=self._alpha_end_str, width=6)
+        ttk.Label(r, text="末帧:").pack(side=tk.LEFT, padx=(4, 0))
+        e2 = ttk.Entry(r, textvariable=self._alpha_end_str, width=5)
         e2.pack(side=tk.LEFT, padx=2)
         e2.bind("<Return>", lambda e: self._apply_alpha("set_alpha_end", self._alpha_end_str))
-
-        r2 = ttk.Frame(self.alpha_inner)
-        r2.pack(fill=tk.X, pady=2)
-        ttk.Button(r2, text="应用渐变", command=self._apply_alpha_gradient).pack(side=tk.LEFT, padx=2)
-        ttk.Button(r2, text="重置逐帧 alpha", command=lambda: self.gui.action("reset_per_frame_alphas")).pack(side=tk.RIGHT)
+        ttk.Button(r, text="应用", command=self._apply_alpha_gradient).pack(side=tk.LEFT, padx=4)
+        ttk.Button(r, text="重置逐帧", command=lambda: self.gui.action("reset_per_frame_alphas")).pack(side=tk.RIGHT)
 
     def _apply_alpha(self, action_name, var):
         try:
@@ -209,50 +208,18 @@ class ControlPanel:
     # ── TRACKING ──
     def _build_tracking_actions(self) -> None:
         self.progress_var = tk.DoubleVar(value=0)
-        self.progress_bar = ttk.Progressbar(
-            self.actions_inner, variable=self.progress_var, length=260, mode="determinate")
+        self.progress_bar = ttk.Progressbar(self.actions_inner, variable=self.progress_var,
+                                             length=260, mode="determinate")
         self.progress_bar.pack(fill=tk.X, pady=2)
         self.lbl_progress = ttk.Label(self.actions_inner, text="0%")
         self.lbl_progress.pack()
         ttk.Button(self.actions_inner, text="⏹ 中止 (Esc)",
-                   command=lambda: self.gui.action("abort_tracking")).pack(fill=tk.X, pady=3)
+                   command=lambda: self.gui.action("abort_tracking")).pack(fill=tk.X, pady=2)
 
-    # ── 帧选取 ──
-    def _build_frame_selection(self) -> None:
-        # K 标记
-        self._mark_btn = ttk.Button(self.framesel_inner, text="K 标记此帧",
-                                     command=lambda: self.gui.action("mark_frame"))
-        self._mark_btn.pack(fill=tk.X, pady=1)
-
-        # R 范围
-        rng_text = "R 范围选择"
-        if self.gui._range_start is not None:
-            rng_text = f"R 范围: {self.gui._range_start} → ?"
-        ttk.Button(self.framesel_inner, text=rng_text,
-                   command=lambda: self.gui.action("range_select")).pack(fill=tk.X, pady=1)
-
-        # 间隔 — 文本输入
-        frm_int = ttk.Frame(self.framesel_inner)
-        frm_int.pack(fill=tk.X, pady=2)
-        ttk.Label(frm_int, text="间隔(秒):", width=8).pack(side=tk.LEFT)
-        entry = ttk.Entry(frm_int, textvariable=self._interval_str, width=6)
-        entry.pack(side=tk.LEFT, padx=2)
-        entry.bind("<Return>", lambda e: self.gui.action("apply_interval"))
-        ttk.Button(frm_int, text="应用 (I)", command=lambda: self.gui.action("apply_interval")).pack(side=tk.RIGHT)
-
-        # 背景
-        ttk.Button(self.framesel_inner,
-                   text=f"B 设为背景 (当前: 帧{self.gui.background_frame_idx})",
-                   command=lambda: self.gui.action("set_bg")).pack(fill=tk.X, pady=1)
-
-    # ── 标记帧列表（Canvas 滚动 + checkbox 网格）──
+    # ── 合成帧列表（Canvas 滚动 + checkbox 网格，展开填满）──
     def _build_marked_list(self) -> None:
         frames = sorted(self.gui.composite_frames)
         count = len(frames)
-        top = ttk.Frame(self.marked_inner)
-        top.pack(fill=tk.X)
-        ttk.Label(top, text=f"已标记 {count} 帧").pack(side=tk.LEFT)
-
         objs = self.gui.objects
         n_objs = len(objs)
 
@@ -264,38 +231,36 @@ class ControlPanel:
         n_rows = len(all_rows)
 
         if n_rows == 0:
-            ttk.Label(self.marked_inner, text="（暂无标记帧）", foreground="gray").pack()
+            ttk.Label(self.marked_inner, text="（暂无标记帧，按 K 标记）", foreground="gray").pack()
             return
 
-        # Canvas + scrollbar
-        canvas_h = min(220, max(60, n_rows * 26 + 28))
-        cvs = tk.Canvas(self.marked_inner, height=canvas_h, highlightthickness=0)
+        # Canvas + scrollbar（填满 frm_marked 空间）
+        cvs = tk.Canvas(self.marked_inner, highlightthickness=0)
         sb = ttk.Scrollbar(self.marked_inner, orient=tk.VERTICAL, command=cvs.yview)
         inner = ttk.Frame(cvs)
-
         inner.bind("<Configure>", lambda e: cvs.configure(scrollregion=cvs.bbox("all")))
         cvs.create_window((0, 0), window=inner, anchor="nw")
         cvs.configure(yscrollcommand=sb.set)
-
         cvs.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         sb.pack(side=tk.RIGHT, fill=tk.Y)
 
         # 绑定滚轮
-        cvs.bind("<MouseWheel>", self._on_mousewheel)
-        for child in (cvs, inner):
-            child.bind("<MouseWheel>", self._on_mousewheel)
+        def _wheel(e):
+            cvs.yview_scroll(int(-1 * e.delta / 120), "units")
+        cvs.bind("<MouseWheel>", _wheel)
+        inner.bind("<MouseWheel>", _wheel)
+        cvs.bind("<Enter>", lambda e: cvs.focus_set())
 
-        # ── 头行：列全选 checkbutton ──
-        ttk.Label(inner, text="帧/时间", width=12, anchor=tk.W).grid(row=0, column=0, sticky="w")
+        # ── 头行 ──
+        ttk.Label(inner, text=f"帧/时间 ({count})", font=("", 8, "bold"), anchor=tk.W).grid(row=0, column=0, sticky="w")
         for j, obj in enumerate(objs):
             cb_var = tk.BooleanVar(value=True)
             cb = ttk.Checkbutton(inner, variable=cb_var)
             cb.grid(row=0, column=j + 1)
             cb.configure(command=lambda oid=obj.obj_id, v=cb_var: self._toggle_all_frames(oid, v.get()))
-            ttk.Label(inner, text=obj.name, foreground=obj.color_hex, font=("", 7)).grid(
+            ttk.Label(inner, text=obj.name[:3], foreground=obj.color_hex, font=("", 6)).grid(
                 row=0, column=j + 1, sticky="s", pady=(14, 0))
-        ttk.Label(inner, text="alpha", width=5, anchor=tk.CENTER).grid(row=0, column=n_objs + 1)
-        ttk.Label(inner, text="✕", width=3, anchor=tk.CENTER).grid(row=0, column=n_objs + 2)
+        ttk.Label(inner, text="α", width=4, anchor=tk.CENTER, font=("", 8, "bold")).grid(row=0, column=n_objs + 1)
 
         # ── 数据行 ──
         for i, fidx in enumerate(all_rows):
@@ -303,11 +268,9 @@ class ControlPanel:
             t_sec = fidx / max(self.gui.fps, 1)
             ts = f"{int(t_sec // 60)}:{int(t_sec % 60):02d}"
             is_bg = (fidx == self.gui.background_frame_idx)
-            label_text = f"帧{fidx} {ts}s" + (" [BG]" if is_bg else "")
-            ttk.Label(inner, text=label_text,
-                      font=("", 9, "bold" if is_bg else "normal"),
-                      foreground="#CC6600" if is_bg else "black",
-                      anchor=tk.W).grid(row=row, column=0, sticky="w")
+            label_text = f" 帧{fidx} {ts}s" + (" [BG]" if is_bg else "")
+            ttk.Label(inner, text=label_text, foreground="#CC6600" if is_bg else "black",
+                      font=("", 8, "bold" if is_bg else "normal")).grid(row=row, column=0, sticky="w")
 
             for j, obj in enumerate(objs):
                 has_mask = self.gui.masks.get(fidx, {}).get(obj.obj_id) is not None
@@ -317,34 +280,25 @@ class ControlPanel:
                     var = tk.BooleanVar(value=checked)
                     cb = ttk.Checkbutton(inner, variable=var)
                     cb.grid(row=row, column=j + 1)
-                    cb.configure(command=lambda f=fidx, o=obj.obj_id, v=var: (
+                    cb.configure(command=lambda f=fidx, o=obj.obj_id: (
                         setattr(self.gui, '_preview_dirty', True),
                         self.gui.action("toggle_frame_object_at", f, o)
                     ))
                 else:
-                    ttk.Label(inner, text="—", anchor=tk.CENTER).grid(row=row, column=j + 1)
+                    ttk.Label(inner, text="—", font=("", 7)).grid(row=row, column=j + 1)
 
-            # Alpha 输入
+            # Alpha
             cur_a = self.gui.get_frame_alpha(fidx)
             a_var = tk.StringVar(value=f"{cur_a:.2f}")
-            a_entry = ttk.Entry(inner, width=5, textvariable=a_var)
-            a_entry.grid(row=row, column=n_objs + 1)
+            a_entry = ttk.Entry(inner, width=5, textvariable=a_var, font=("", 8))
+            a_entry.grid(row=row, column=n_objs + 1, padx=1)
             a_entry.bind("<Return>", lambda e, f=fidx: self._apply_frame_alpha(f, e.widget))
-            a_entry.bind("<FocusOut>", lambda e, f=fidx: self._apply_frame_alpha(f, e.widget))
 
-            # 删除按钮
-            ttk.Button(inner, text="✕", width=2,
-                       command=lambda f=fidx: (
-                           self.gui.composite_frames.discard(f),
-                           setattr(self.gui, '_preview_dirty', True)
-                       )).grid(row=row, column=n_objs + 2)
-
-        # ── 底部按钮行 ──
-        btn_row = ttk.Frame(self.marked_inner)
-        btn_row.pack(fill=tk.X, pady=2)
-        ttk.Button(btn_row, text="清空全部", command=lambda: self.gui.action("clear_all_marked")).pack(side=tk.LEFT, padx=1)
-        ttk.Button(btn_row, text="◀ 上一个标记", command=lambda: self.gui.action("prev_marked")).pack(side=tk.RIGHT, padx=1)
-        ttk.Button(btn_row, text="下一个标记 ▶", command=lambda: self.gui.action("next_marked")).pack(side=tk.RIGHT, padx=1)
+            # 删除
+            ttk.Button(inner, text="✕", width=2, command=lambda f=fidx: (
+                self.gui.composite_frames.discard(f),
+                setattr(self.gui, '_preview_dirty', True)
+            )).grid(row=row, column=n_objs + 2)
 
     def _toggle_all_frames(self, obj_id: int, show: bool) -> None:
         for fidx in self.gui.composite_frames:
@@ -362,59 +316,42 @@ class ControlPanel:
         except ValueError:
             pass
 
-    def _on_mousewheel(self, event):
-        for child in self.marked_inner.winfo_children():
-            if isinstance(child, tk.Canvas):
-                try:
-                    if child.winfo_containing(event.x_root, event.y_root):
-                        child.yview_scroll(int(-1 * event.delta / 120), "units")
-                        return
-                except tk.TclError:
-                    pass
-
     # ── 可见范围 ──
     def _build_vis_range(self, editable: bool) -> None:
         self.frm_vis.pack_forget()
-        for w in self.frm_vis.winfo_children():
-            w.destroy()
+        for w in self.frm_vis.winfo_children(): w.destroy()
 
-        if not self.gui.objects:
-            self.frm_vis.pack(fill=tk.X, padx=5, pady=2, after=self.frm_view)
-            ttk.Label(self.frm_vis, text="无物体").pack()
+        if not self.gui.objects or self.gui.active_object() is None:
+            self.frm_vis.pack(fill=tk.X, padx=3, pady=1, after=self.frm_marked)
+            ttk.Label(self.frm_vis, text="无活跃物体").pack()
             return
 
         obj = self.gui.active_object()
-        if obj is None:
-            self.frm_vis.pack(fill=tk.X, padx=5, pady=2, after=self.frm_view)
-            return
-
         self.frm_vis.configure(text=f"可见范围 ({obj.name})")
-        ttk.Label(self.frm_vis, text=f"活跃: {obj.name}", foreground=obj.color_hex).pack(anchor=tk.W)
-
         n = max(self.gui.n_frames - 1, 1)
         self.vis_start_var = tk.IntVar(value=obj.vis_start if obj.vis_start is not None else 0)
         self.vis_end_var = tk.IntVar(value=obj.vis_end if obj.vis_end is not None else n)
 
-        for label, var_attr in [("起始:", "vis_start_var"), ("结束:", "vis_end_var")]:
+        for label, var_attr in [("始", "vis_start_var"), ("末", "vis_end_var")]:
             frm = ttk.Frame(self.frm_vis)
             frm.pack(fill=tk.X)
-            ttk.Label(frm, text=label).pack(side=tk.LEFT)
+            ttk.Label(frm, text=label, width=2).pack(side=tk.LEFT)
             scale = ttk.Scale(frm, from_=0, to=n, variable=getattr(self, var_attr),
-                              orient=tk.HORIZONTAL, length=170)
-            scale.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=3)
-            if editable:
-                scale.configure(command=self._on_vis_change)
-            else:
+                              orient=tk.HORIZONTAL, length=240)
+            scale.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+            if not editable:
                 scale.configure(state=tk.DISABLED)
-            ttk.Label(frm, textvariable=getattr(self, var_attr), width=5).pack(side=tk.LEFT)
+            else:
+                scale.configure(command=self._on_vis_change)
+            ttk.Label(frm, textvariable=getattr(self, var_attr), width=4).pack(side=tk.LEFT)
 
         if editable:
-            ttk.Button(self.frm_vis, text="应用范围",
-                       command=lambda: self.gui.action("apply_vis_range")).pack(fill=tk.X, pady=2)
-            ttk.Button(self.frm_vis, text="重置为全部帧",
-                       command=lambda: self.gui.action("reset_vis_range")).pack(fill=tk.X)
+            bf = ttk.Frame(self.frm_vis)
+            bf.pack(fill=tk.X, pady=1)
+            ttk.Button(bf, text="应用范围", command=lambda: self.gui.action("apply_vis_range")).pack(side=tk.LEFT, padx=1)
+            ttk.Button(bf, text="重置全部帧", command=lambda: self.gui.action("reset_vis_range")).pack(side=tk.LEFT, padx=1)
 
-        self.frm_vis.pack(fill=tk.X, padx=5, pady=2, after=self.frm_view)
+        self.frm_vis.pack(fill=tk.X, padx=3, pady=1, after=self.frm_marked)
 
     def _on_vis_change(self, *args) -> None:
         obj = self.gui.active_object()
@@ -439,19 +376,16 @@ class ControlPanel:
             self._build_dynamic()
             self._last_marked_count = len(gui.composite_frames)
 
-        # 状态标签
         state_text = "跟踪中" if gui.state == GUIState.TRACKING else "编辑"
         self.lbl_state.configure(text=state_text)
-        fps_info = ""
-        if gui.args.process_fps:
-            fps_info = f" | proc-fps={gui.args.process_fps:.0f}"
-        self.lbl_frame.configure(text=f"帧: {gui.current_frame_idx} / {gui.n_frames}{fps_info}")
+        fps_info = f" proc-fps={gui.args.process_fps:.0f}" if gui.args.process_fps else ""
+        self.lbl_frame.configure(text=f"帧: {gui.current_frame_idx}/{gui.n_frames}{fps_info}")
 
         if gui.active_object():
             obj = gui.active_object()
             n_pts = len(obj.points)
             dirty_mark = " +" if obj._dirty and gui.state != GUIState.TRACKING else ""
-            self.lbl_active.configure(text=f"活跃: {obj.name} ({n_pts}点, 种子帧{obj.seed_frame}){dirty_mark}")
+            self.lbl_active.configure(text=f"活跃: {obj.name} ({n_pts}点, 种子{obj.seed_frame}){dirty_mark}")
         else:
             self.lbl_active.configure(text="活跃: —")
 
@@ -462,15 +396,13 @@ class ControlPanel:
         for i, del_btn in enumerate(getattr(self, "_del_btns", [])):
             del_btn.configure(state=tk.DISABLED if i == gui.active_obj_idx and gui.state == GUIState.TRACKING else tk.NORMAL)
 
-        if self.view_var.get() != gui.viz_mode:
+        if hasattr(self, "view_var") and self.view_var.get() != gui.viz_mode:
             self.view_var.set(gui.viz_mode)
 
-        # ★ 修复：每帧更新标记按钮文字
         if hasattr(self, "_mark_btn"):
             marked = gui.current_frame_idx in gui.composite_frames
-            self._mark_btn.configure(text="✓ 已标记 (K 取消)" if marked else "K 标记此帧")
+            self._mark_btn.configure(text="✓ K取消" if marked else "K 标记")
 
-        # Alpha 同步
         if gui.state == GUIState.EDIT:
             if self._alpha_start_str.get() != f"{gui.alpha_start:.2f}":
                 self._alpha_start_str.set(f"{gui.alpha_start:.2f}")
@@ -484,31 +416,28 @@ class ControlPanel:
 
         COLS = 2
         for i, obj in enumerate(self.gui.objects):
-            row = i // COLS
-            col = (i % COLS) * 2
+            row, col = i // COLS, (i % COLS) * 2
             is_active = (i == self.gui.active_obj_idx)
             n_pts = len(obj.points)
 
-            if obj._dirty and n_pts > 0:
-                label = f"● {obj.name} ({n_pts}点)+"
-            elif n_pts > 0:
-                label = f"✓ {obj.name} ({n_pts}点)"
-            else:
-                label = f"○ {obj.name} (空)"
+            st = "+" if obj._dirty and n_pts else ("✓" if n_pts else "○")
+            label = f"{st} {obj.name}"
+            if n_pts:
+                label += f" ({n_pts}p)"
 
             btn = tk.Button(self.obj_grid_frame, text=label, fg=obj.color_hex,
                             bg="white" if is_active else "#e0e0e0", activebackground="#c0c0ff",
                             relief=tk.RAISED if is_active else tk.FLAT,
-                            font=("", 9, "bold") if is_active else ("", 9),
+                            font=("", 8, "bold") if is_active else ("", 8),
                             command=lambda idx=i: self.gui.action("select_object", idx))
-            btn.grid(row=row, column=col, padx=2, pady=2, sticky="ew")
+            btn.grid(row=row, column=col, padx=1, pady=1, sticky="ew")
             self._obj_btns.append(btn)
 
             del_btn = tk.Button(self.obj_grid_frame, text="✕", fg="#cc0000",
                                 bg="#ffe0e0" if is_active else "#e0e0e0", activebackground="#ffcccc",
-                                relief=tk.FLAT, font=("", 9),
+                                relief=tk.FLAT, font=("", 8),
                                 command=lambda idx=i: self.gui.action("delete_object", idx))
-            del_btn.grid(row=row, column=col + 1, padx=1, pady=2)
+            del_btn.grid(row=row, column=col + 1, padx=1, pady=1)
             self._del_btns.append(del_btn)
 
         for c in range(COLS * 2):
@@ -531,9 +460,7 @@ class ControlPanel:
     # ==================================================================
     def _on_tk_key(self, event: tk.Event) -> None:
         gui = self.gui
-        key = event.keysym
-        char = event.char
-        ctrl = event.state & 0x4
+        key = event.keysym; char = event.char; ctrl = event.state & 0x4
 
         if key == "Escape":
             gui.action("quit")
@@ -543,56 +470,35 @@ class ControlPanel:
         elif key == "BackSpace":
             obj = gui.active_object()
             if obj and obj.points:
-                obj.points.pop()
-                obj._dirty = True
-                gui._preview_dirty = True
+                obj.points.pop(); obj._dirty = True; gui._preview_dirty = True
         elif key == "Delete":
             gui.action("delete_object", gui.active_obj_idx)
-        elif key in ("Left", "Right", "Up", "Down"):
+        elif key in ("Left", "Right"):
             if ctrl:
                 gui.action("prev_marked" if key == "Left" else "next_marked")
-            elif key == "Left":
-                gui.current_frame_idx = (gui.current_frame_idx - 1) % gui.n_frames
+            else:
+                gui.current_frame_idx = (gui.current_frame_idx + (-1 if key == "Left" else 1)) % gui.n_frames
                 gui._preview_dirty = True
-            elif key == "Right":
-                gui.current_frame_idx = (gui.current_frame_idx + 1) % gui.n_frames
-                gui._preview_dirty = True
-        elif char.lower() == "k":
-            gui.action("mark_frame")
-        elif char.lower() == "b":
-            gui.action("set_bg")
+        elif char.lower() == "k": gui.action("mark_frame")
+        elif char.lower() == "b": gui.action("set_bg")
         elif char.lower() == "v":
             cycle = {"mask": "composite", "composite": "original", "original": "mask"}
             gui.action("view_" + cycle[gui.viz_mode])
-        elif char.lower() == "i":
-            gui.action("apply_interval")
-        elif char.lower() == "s":
-            gui.action("save")
-        elif char.lower() == "n":
-            gui.action("new_object")
-        elif char.lower() == "p":
-            gui.action("preview_frame")
-        elif char.lower() == "r":
-            gui.action("range_select")
-        elif char.lower() == "[":
-            obj = gui.active_object()
-            if obj:
-                obj.vis_start = gui.current_frame_idx
-                gui._preview_dirty = True
-        elif char.lower() == "]":
-            obj = gui.active_object()
-            if obj:
-                obj.vis_end = gui.current_frame_idx
-                gui._preview_dirty = True
-        elif char.lower() == "\\":
-            gui.action("reset_vis_range")
+        elif char.lower() == "i": gui.action("apply_interval")
+        elif char.lower() == "s": gui.action("save")
+        elif char.lower() == "n": gui.action("new_object")
+        elif char.lower() == "p": gui.action("preview_frame")
+        elif char.lower() == "r": gui.action("range_select")
+        elif char.lower() == "[" and gui.active_object():
+            gui.active_object().vis_start = gui.current_frame_idx; gui._preview_dirty = True
+        elif char.lower() == "]" and gui.active_object():
+            gui.active_object().vis_end = gui.current_frame_idx; gui._preview_dirty = True
+        elif char.lower() == "\\": gui.action("reset_vis_range")
         elif char in "123456789":
             idx = int(char) - 1
-            if idx < len(gui.objects):
-                gui.action("select_object", idx)
+            if idx < len(gui.objects): gui.action("select_object", idx)
         elif key == "Tab":
-            if gui.objects:
-                gui.active_obj_idx = (gui.active_obj_idx + 1) % len(gui.objects)
+            if gui.objects: gui.active_obj_idx = (gui.active_obj_idx + 1) % len(gui.objects)
 
     def _on_close(self) -> None:
         self.gui.action("quit")

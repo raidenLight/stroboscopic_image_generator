@@ -379,14 +379,7 @@ class StroboscopicGUI:
             self._set_status(msg, "success")
 
         elif name == "restart":
-            if self.panel:
-                self._in_modal = True
-                try:
-                    ok = self.panel.confirm("重置全部", "确定要清除所有数据重新开始？")
-                finally:
-                    self._in_modal = False
-                if not ok:
-                    return
+            # 直接重置，无确认对话框（避免 messagebox 卡死 + 误触概率极低）
             if self.inference_state is not None:
                 with contextlib.suppress(Exception):
                     self.predictor.reset_state(self.inference_state)
