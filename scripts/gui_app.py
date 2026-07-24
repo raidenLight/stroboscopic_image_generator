@@ -1040,8 +1040,9 @@ class StroboscopicGUI:
     def _composite_and_save(self) -> str:
         from pathlib import Path
         out_img = self._render_composite()
-        # 以原视频文件名命名，重名则后缀 +1
-        out_dir = Path(self.video_path).parent
+        # 保存到项目 results/ 目录，以原视频文件名命名，重名则后缀 +1
+        out_dir = Path(__file__).resolve().parent.parent / "results"
+        out_dir.mkdir(parents=True, exist_ok=True)
         base = Path(self.video_path).stem + "_stroboscopic"
         out_path = out_dir / f"{base}.png"
         n = 1
