@@ -101,8 +101,9 @@ class StroboscopicGUI:
         self.alpha_end: float = args.alpha
         self.per_frame_alpha: dict[int, float] = {}
 
-        # ── 跟踪后隐藏选点 ──
+        # ── 选点模式 ──
         self._show_points_overlay: bool = True
+        self._point_mode_active: bool = True   # 初始允许点击选点
 
         # ── 帧缓存 ──
         self._frame_cache: dict[int, np.ndarray] = {}
@@ -357,6 +358,20 @@ class StroboscopicGUI:
         elif name == "preview_frame":
             self._do_single_frame_preview()
 
+        elif name == "toggle_point_mode":
+            if self._point_mode_active:
+                # 退出选点：清除活跃物体未保存的点
+                obj = self.active_object()
+                if obj and obj._dirty:
+                    obj.points.clear()
+                    obj._dirty = False
+                self._point_mode_active = False
+                self._show_points_overlay = False
+                self._set_status("选点模式已关闭，点击图片不会添加点。", "info")
+            else:
+                self._point_mode_active = True
+                self._set_status("选点模式已开启，点击图片添加跟踪点。", "info")
+
         elif name == "save":
             if not self.composite_frames:
                 self._set_status("没有标记任何帧！请用 K 键或间隔选择来标记帧。", "error")
@@ -387,6 +402,7 @@ class StroboscopicGUI:
             self.viz_mode = "mask"
             self._show_onboarding = True
             self._show_points_overlay = True
+            self._point_mode_active = True
             self.per_frame_alpha.clear()
             self.alpha_start = self.args.alpha
             self.alpha_end = self.args.alpha
@@ -595,6 +611,9 @@ class StroboscopicGUI:
                 # 首次点击：仅关闭引导覆盖层，不添加点
                 if self._show_onboarding:
                     self._show_onboarding = False
+                    return
+                # ★ 选点模式未激活时忽略点击
+                if not self._point_mode_active:
                     return
                 # 如果无物体，自动创建一个
                 if not self.objects:

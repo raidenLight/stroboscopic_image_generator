@@ -185,6 +185,12 @@ class ControlPanel:
         ttk.Button(r, text="💾 保存 (S)", command=lambda: self.gui.action("save")).pack(
             side=tk.LEFT, padx=1, fill=tk.X, expand=True)
 
+        # 选点模式切换按钮（第二行）
+        r2 = ttk.Frame(self.actions_inner)
+        r2.pack(fill=tk.X, pady=(2, 0))
+        self._pt_btn = ttk.Button(r2, command=lambda: self.gui.action("toggle_point_mode"))
+        self._pt_btn.pack(fill=tk.X)
+
     # ── 视图 ──
     def _build_view_section(self) -> None:
         self.view_var = tk.StringVar(value=self.gui.viz_mode)
@@ -536,6 +542,16 @@ class ControlPanel:
             marked = gui.current_frame_idx in gui.composite_frames
             try:
                 self._mark_btn.configure(text="✓ K取消" if marked else "K 标记")
+            except tk.TclError:
+                pass
+
+        # 选点模式按钮
+        if hasattr(self, "_pt_btn"):
+            try:
+                if gui._point_mode_active:
+                    self._pt_btn.configure(text="⏹ 退出选点")
+                else:
+                    self._pt_btn.configure(text="▶ 开始选点")
             except tk.TclError:
                 pass
 
