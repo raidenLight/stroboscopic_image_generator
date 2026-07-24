@@ -340,25 +340,18 @@ class ControlPanel:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
-    def update(self) -> bool:
-        """Sync widget states from GUI and process tk events. Called per-frame.
-        Returns False if the panel window was closed."""
+    def sync_from_gui(self) -> None:
+        """仅同步控件状态（不调 root.update()，tkinter mainloop 自行处理事件）。"""
         gui = self.gui
 
-        # Check if tkinter window was closed
-        try:
-            self.root.winfo_exists()
-        except tk.TclError:
-            return False
-
-        # Check if state changed → rebuild dynamic widgets
+        # 状态变化 → 重建动态控件
         if (gui.state != self._last_state
                 or gui.active_obj_idx != self._last_active_idx
                 or len(gui.objects) != self._last_obj_count):
             self._rebuild_object_buttons()
             self._build_dynamic()
 
-        # Update status labels
+        # 同步状态标签
         state_names = {GUIState.SETUP: "设置", GUIState.TRACKING: "跟踪中",
                        GUIState.SELECTION: "选择", GUIState.SAVE: "已保存"}
         self.lbl_state.configure(text=state_names.get(gui.state, "—"))
@@ -375,18 +368,18 @@ class ControlPanel:
         else:
             self.lbl_active.configure(text="活跃: —")
 
-        # Button highlights for object buttons
-        # Note: tk.Button uses bg/relief/font, NOT style (style is ttk-only)
+        # 物体按钮高亮
         for i, btn in enumerate(getattr(self, '_obj_btns', [])):
             if i == gui.active_obj_idx:
                 btn.configure(bg="white", relief=tk.RAISED, font=("", 9, "bold"))
             else:
                 btn.configure(bg="#e0e0e0", relief=tk.FLAT, font=("", 9))
 
-        # Sync view radio
-        self.view_var.set(gui.viz_mode)
+        # 同步视图单选按钮
+        if self.view_var.get() != gui.viz_mode:
+            self.view_var.set(gui.viz_mode)
 
-        # Sync visibility sliders if in SELECTION
+        # 同步可见范围滑块
         if gui.state == GUIState.SELECTION and gui.active_object():
             obj = gui.active_object()
             n = max(gui.n_frames - 1, 1)
@@ -399,19 +392,11 @@ class ControlPanel:
                 if self.vis_end_var.get() != val:
                     self.vis_end_var.set(val)
 
-        # Update interval label
+        # 同步间隔标签
         if gui.state == GUIState.SELECTION and hasattr(self, 'lbl_interval_count'):
             fps = max(gui.fps, 1)
             n_sel = int(gui.n_frames / max(fps * self._interval_value.get(), 0.1))
-            self.lbl_interval_count.configure(text=f"~{n_sel} frames")
-
-        # Process tk events
-        try:
-            self.root.update_idletasks()
-            self.root.update()
-        except tk.TclError:
-            return False
-        return True
+            self.lbl_interval_count.configure(text=f"~{n_sel} 帧")
 
     def _rebuild_object_buttons(self) -> None:
         """Rebuild object selection buttons."""
@@ -772,7 +757,7 @@ class StroboscopicGUI:
             self.status_timer = 90
 
     # ===================================================================
-    # Main loop
+    # Main loop — tkinter drives the event loop, OpenCV frames via after()
     # ===================================================================
     def run(self) -> None:
         cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
@@ -788,43 +773,60 @@ class StroboscopicGUI:
         self.panel = ControlPanel(self)
         self._quit_flag = False
 
-        try:
-            while not self._quit_flag:
-                if cv2.getWindowProperty(WINDOW_NAME, cv2.WND_PROP_VISIBLE) < 1:
-                    break
-
-                key_raw = cv2.waitKeyEx(20)
-                if key_raw >= 0:  # -1 = no key pressed (timeout)
-                    key = key_raw & 0xFF
-                    self._last_key_raw = key_raw
-                    self._handle_keyboard(key, key_raw)
-
-                # Dispatch by state
-                if self.state == GUIState.SETUP:
-                    canvas = self._render_setup()
-                elif self.state == GUIState.TRACKING:
-                    canvas = self._render_tracking()
-                elif self.state == GUIState.SELECTION:
-                    canvas = self._render_selection()
-                else:
-                    canvas = self._render_save()
-
-                cv2.imshow(WINDOW_NAME, canvas)
-
-                if self.status_timer > 0:
-                    self.status_timer -= 1
-                    if self.status_timer == 0:
-                        self.status_message = ""
-
-                # Sync tkinter panel
-                if self.panel:
-                    if not self.panel.update():
-                        break  # panel window was closed
-        finally:
-            if self.panel:
+        def tick() -> None:
+            """每 ~33ms 执行一次：处理键盘 → 渲染帧 → 同步面板"""
+            if self._quit_flag:
                 self.panel.destroy()
-            cv2.destroyWindow(WINDOW_NAME)
-            cv2.waitKey(1)
+                cv2.destroyWindow(WINDOW_NAME)
+                return
+
+            # 检测 OpenCV 窗口是否被关闭
+            try:
+                if cv2.getWindowProperty(WINDOW_NAME, cv2.WND_PROP_VISIBLE) < 1:
+                    self.panel.destroy()
+                    cv2.destroyWindow(WINDOW_NAME)
+                    return
+            except cv2.error:
+                self.panel.destroy()
+                return
+
+            # 非阻塞读取键盘（避免 GIL 冲突）
+            key_raw = cv2.pollKey()
+            if key_raw >= 0:
+                key = key_raw & 0xFF
+                self._last_key_raw = key_raw
+                self._handle_keyboard(key, key_raw)
+
+            # 渲染当前帧
+            if self.state == GUIState.SETUP:
+                canvas = self._render_setup()
+            elif self.state == GUIState.TRACKING:
+                canvas = self._render_tracking()
+            elif self.state == GUIState.SELECTION:
+                canvas = self._render_selection()
+            else:
+                canvas = self._render_save()
+
+            cv2.imshow(WINDOW_NAME, canvas)
+
+            # 状态消息计时
+            if self.status_timer > 0:
+                self.status_timer -= 1
+                if self.status_timer == 0:
+                    self.status_message = ""
+
+            # 同步 tkinter 面板（仅刷新状态，不调 root.update()）
+            if self.panel:
+                self.panel.sync_from_gui()
+
+            # 下一次 tick
+            if not self._quit_flag:
+                self.panel.root.after(33, tick)
+
+        # 启动循环
+        self.panel.root.after(100, tick)  # 延迟 100ms 等面板渲染完毕
+        self.panel.root.mainloop()
+        cv2.destroyAllWindows()
 
     # ===================================================================
     # Keyboard handler
