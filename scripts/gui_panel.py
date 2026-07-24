@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from gui_app import StroboscopicGUI
 
 PANEL_WIDTH = 430
-PANEL_HEIGHT = 700
+PANEL_HEIGHT = 620
 
 
 class ControlPanel:
@@ -25,7 +25,7 @@ class ControlPanel:
         self.root.title("控制面板 — 频闪图像生成器")
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.resizable(True, True)
-        self.root.minsize(360, 540)
+        self.root.minsize(360, 580)
         self.root.geometry(f"{PANEL_WIDTH}x{PANEL_HEIGHT}+50+50")
         self.root.lift()
         # ★ bind_all 确保 Entry 等控件获焦时快捷键也生效
@@ -115,7 +115,7 @@ class ControlPanel:
 
         # ── 合成帧列表（展开占满剩余空间）──
         self.frm_marked = ttk.LabelFrame(self.root, text="合成帧", padding=3)
-        self.frm_marked.pack(fill=tk.BOTH, expand=True, padx=3, pady=1)
+        self.frm_marked.pack(fill=tk.BOTH, padx=3, pady=1)  # 不 expand，Treeview固定8行
         self.marked_inner = ttk.Frame(self.frm_marked)
         self.marked_inner.pack(fill=tk.BOTH, expand=True)
 

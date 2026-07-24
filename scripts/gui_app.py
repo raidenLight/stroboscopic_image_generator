@@ -236,7 +236,6 @@ class StroboscopicGUI:
                     with contextlib.suppress(Exception):
                         self.predictor.reset_state(self.inference_state)
                 self.state = GUIState.EDIT
-                self._show_points_overlay = True
                 self._preview_mask = None          # 清除预览残影
                 n_preserved = sum(len(m) for m in self.masks.values())
                 self._set_status(f"跟踪已中止。{n_preserved} 个已有 mask 已保留。", "warn")
@@ -826,7 +825,6 @@ class StroboscopicGUI:
                     if obj._dirty and obj.points:
                         obj._dirty = False
                 self.state = GUIState.EDIT
-                self._show_points_overlay = True
                 self._preview_mask = None          # 清除预览残影
                 self.current_frame_idx = min_seed
                 self._set_trackbar(TRACKBAR_FRAME, self.current_frame_idx)
