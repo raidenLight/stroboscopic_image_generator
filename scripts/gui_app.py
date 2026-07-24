@@ -60,8 +60,8 @@ class StroboscopicGUI:
         self.video_path = video_path
         self.n_frames = n_frames
         self.fps = fps
-        ret, frame = read_frame_at_fast(cap, 0, {})
-        if not ret or frame.size == 0:
+        frame = read_frame_at_fast(cap, 0, {})
+        if frame.size == 0:
             raise RuntimeError("无法读取第一帧。")
         self.h, self.w = frame.shape[:2]
 
