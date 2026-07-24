@@ -38,8 +38,8 @@ def read_frame_at_fast(cap, frame_idx: int, cache: dict[int, np.ndarray]) -> np.
     cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
     ret, frame = cap.read()
     if not ret:
-        return np.zeros((cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 480,
-                         cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 640, 3), dtype=np.uint8)
+        return np.zeros((int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 480),
+                         int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 640), 3), dtype=np.uint8)
 
     if len(cache) >= 50:
         # 删除最旧的条目
@@ -244,6 +244,7 @@ class StroboscopicGUI:
                     with contextlib.suppress(Exception):
                         self.predictor.reset_state(self.inference_state)
                 self.state = GUIState.EDIT
+                self._show_points_overlay = True
                 n_preserved = sum(len(m) for m in self.masks.values())
                 self._set_status(f"跟踪已中止。{n_preserved} 个已有 mask 已保留。", "warn")
 
@@ -796,6 +797,7 @@ class StroboscopicGUI:
                     if obj._dirty and obj.points:
                         obj._dirty = False
                 self.state = GUIState.EDIT
+                self._show_points_overlay = True
                 self.current_frame_idx = min_seed
                 self._set_trackbar(TRACKBAR_FRAME, self.current_frame_idx)
                 total_masks = sum(len(m) for m in self.masks.values())

@@ -253,9 +253,13 @@ class ControlPanel:
         cvs.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         sb.pack(side=tk.RIGHT, fill=tk.Y)
 
-        # 绑定滚轮
+        # 绑定滚轮（带边界钳制）
         def _wheel(e):
             cvs.yview_scroll(int(-1 * e.delta / 120), "units")
+            # 防止滚动超出内容范围
+            y0, y1 = cvs.yview()
+            if y0 <= 0.0:
+                cvs.yview_moveto(0.0)
         cvs.bind("<MouseWheel>", _wheel)
         inner.bind("<MouseWheel>", _wheel)
         cvs.bind("<Enter>", lambda e: cvs.focus_set())
