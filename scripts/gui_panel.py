@@ -11,7 +11,7 @@ from gui_types import GUIState
 if TYPE_CHECKING:
     from gui_app import StroboscopicGUI
 
-PANEL_WIDTH = 430
+PANEL_WIDTH = 460
 PANEL_HEIGHT = 750
 
 
@@ -122,8 +122,6 @@ class ControlPanel:
         self.btn_restart = ttk.Button(bottom, text="↺ 重置全部",
                                        command=lambda: self.gui.action("restart"))
         self.btn_restart.pack(side=tk.RIGHT, padx=2)
-        ttk.Button(bottom, text="退出 (Esc)",
-                   command=lambda: self.gui.action("quit")).pack(side=tk.RIGHT, padx=2)
 
         # ── 日志栏（倒数第二行）──
         log_frame = tk.Frame(self.root, bg="#f0f0e0", relief=tk.SUNKEN, bd=1)
@@ -334,22 +332,18 @@ class ControlPanel:
 
         # Col 0: 行选框
         tree.heading("row", text="")
-        tree.column("row", width=24, anchor=tk.CENTER, stretch=False, minwidth=24)
-        # Col 1: 帧标签
+        tree.column("row", width=26, anchor=tk.CENTER, stretch=True, minwidth=22)
         tree.heading("frame", text=f"帧 / 时间 ({len(frames)})")
-        tree.column("frame", width=80, anchor=tk.W, stretch=True, minwidth=60)
-        # Col 2..n+1: 物体列
+        tree.column("frame", width=60, anchor=tk.W, stretch=True, minwidth=50)
         for obj in objs:
             col = f"obj_{obj.obj_id}"
             tree.heading(col, text=f"☑ {obj.name}",
                          command=lambda oid=obj.obj_id: self._col_toggle_all(tree, oid))
-            tree.column(col, width=42, anchor=tk.CENTER, stretch=False, minwidth=36)
-        # Alpha
+            tree.column(col, width=46, anchor=tk.CENTER, stretch=True, minwidth=36)
         tree.heading("alpha", text="α")
-        tree.column("alpha", width=46, anchor=tk.CENTER, stretch=False, minwidth=40)
-        # 删除
+        tree.column("alpha", width=46, anchor=tk.CENTER, stretch=True, minwidth=38)
         tree.heading("del", text="")
-        tree.column("del", width=24, anchor=tk.CENTER, stretch=False, minwidth=22)
+        tree.column("del", width=26, anchor=tk.CENTER, stretch=True, minwidth=22)
 
         # Scrollbar
         sb = ttk.Scrollbar(self.marked_inner, orient=tk.VERTICAL, command=tree.yview)
