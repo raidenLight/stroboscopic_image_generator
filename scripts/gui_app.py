@@ -964,7 +964,7 @@ class StroboscopicGUI:
         active_name = active.name if active else "—"
 
         t_sec = self.current_frame_idx / max(self.fps, 1)
-        ts = f"{int(t_sec // 60)} min {t_sec % 60:.2f} s"
+        ts = f"{int(t_sec // 60)}min {t_sec % 60:.2f}s"
         if self.state == GUIState.TRACKING:
             n_masks = sum(len(m) for m in self.masks.values())
             info = (f"TRACKING | Frame {self.current_frame_idx}/{self.n_frames} {ts} fps={self.fps:.0f}"

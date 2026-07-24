@@ -363,7 +363,7 @@ class ControlPanel:
         fps = max(self.gui.fps, 1)
         for fidx in all_rows:
             t_sec = fidx / fps
-            ts = f"{int(t_sec // 60)} min {t_sec % 60:.2f} s"
+            ts = f"{int(t_sec // 60)}min {t_sec % 60:.2f}s"
             is_bg = (fidx == bg)
             is_excluded = fidx in self.gui._excluded_frames
             label = f"帧{fidx} {ts}" + (" [BG]" if is_bg else "") + (" [排除]" if is_excluded else "")
