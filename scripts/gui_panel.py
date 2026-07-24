@@ -69,9 +69,16 @@ class ControlPanel:
     # 静态控件（只创建一次）
     # ==================================================================
     def _build_static(self) -> None:
-        # ── 状态（固定顶部）──
+        # ★ 使用 grid 布局：日志栏和快捷键行设置 minsize 绝对不被压缩，
+        # Treeview 行 weight=1 吸收所有弹性压缩
+        self.root.grid_columnconfigure(0, weight=1)
+        self.root.grid_rowconfigure(6, weight=1)                    # Treeview — 弹性
+        self.root.grid_rowconfigure(7, weight=0, minsize=170)       # 日志栏 — 不可压缩
+        self.root.grid_rowconfigure(8, weight=0, minsize=48)        # 快捷键 — 不可压缩
+
+        # ── 状态（Row 0）──
         frm = ttk.LabelFrame(self.root, text="状态", padding=3)
-        frm.pack(fill=tk.X, padx=3, pady=1)
+        frm.grid(row=0, column=0, sticky="ew", padx=3, pady=1)
         self.lbl_state = ttk.Label(frm, text="编辑", font=("", 10, "bold"))
         self.lbl_state.pack(anchor=tk.W)
         lf = ttk.Frame(frm)
@@ -81,62 +88,45 @@ class ControlPanel:
         self.lbl_active = ttk.Label(lf, text="活跃: —")
         self.lbl_active.pack(side=tk.RIGHT)
 
-        # ── 物体 ──
+        # ── 物体（Row 1）──
         self.frm_objects = ttk.LabelFrame(self.root, text="物体", padding=3)
-        self.frm_objects.pack(fill=tk.X, padx=3, pady=1)
+        self.frm_objects.grid(row=1, column=0, sticky="ew", padx=3, pady=1)
         self.obj_grid_frame = ttk.Frame(self.frm_objects)
         self.obj_grid_frame.pack(fill=tk.X)
 
-        # ── 操作 ──
+        # ── 操作（Row 2）──
         self.frm_actions = ttk.LabelFrame(self.root, text="操作", padding=3)
-        self.frm_actions.pack(fill=tk.X, padx=3, pady=1)
+        self.frm_actions.grid(row=2, column=0, sticky="ew", padx=3, pady=1)
         self.actions_inner = ttk.Frame(self.frm_actions)
         self.actions_inner.pack(fill=tk.X)
 
-        # ── 视图 ──
+        # ── 视图（Row 3）──
         self.frm_view = ttk.LabelFrame(self.root, text="视图", padding=3)
-        self.frm_view.pack(fill=tk.X, padx=3, pady=1)
+        self.frm_view.grid(row=3, column=0, sticky="ew", padx=3, pady=1)
         self.view_inner = ttk.Frame(self.frm_view)
         self.view_inner.pack(fill=tk.X)
 
-        # ── 帧选取 ──
+        # ── 帧选取（Row 4）──
         self.frm_select = ttk.LabelFrame(self.root, text="帧选取", padding=3)
-        self.frm_select.pack(fill=tk.X, padx=3, pady=1)
+        self.frm_select.grid(row=4, column=0, sticky="ew", padx=3, pady=1)
         self.select_inner = ttk.Frame(self.frm_select)
         self.select_inner.pack(fill=tk.X)
 
-        # ── Alpha ──
+        # ── Alpha（Row 5）──
         self.frm_alpha = ttk.LabelFrame(self.root, text="Alpha 渐变", padding=3)
-        self.frm_alpha.pack(fill=tk.X, padx=3, pady=1)
+        self.frm_alpha.grid(row=5, column=0, sticky="ew", padx=3, pady=1)
         self.alpha_inner = ttk.Frame(self.frm_alpha)
         self.alpha_inner.pack(fill=tk.X)
 
-        # ── 合成帧列表（展开占满剩余空间）──
+        # ── 合成帧列表（Row 6, weight=1 — 吸收所有弹性压缩）──
         self.frm_marked = ttk.LabelFrame(self.root, text="合成帧", padding=3)
-        self.frm_marked.pack(fill=tk.BOTH, padx=3, pady=1)  # 不 expand，Treeview固定8行
+        self.frm_marked.grid(row=6, column=0, sticky="nsew", padx=3, pady=1)
         self.marked_inner = ttk.Frame(self.frm_marked)
         self.marked_inner.pack(fill=tk.BOTH, expand=True)
 
-        # ── 快捷键 + 操作按钮（最底部，双行防止文字溢出）──
-        bottom = ttk.Frame(self.root)
-        bottom.pack(fill=tk.X, padx=3, pady=1, side=tk.BOTTOM)
-        # 行1：操作快捷键 + 重置按钮
-        r1 = ttk.Frame(bottom)
-        r1.pack(fill=tk.X)
-        ttk.Label(r1, text="P预览 K标记 I间隔 R范围 B背景  V视图 S保存",
-                   font=("", 8)).pack(side=tk.LEFT)
-        self.btn_restart = ttk.Button(r1, text="↺ 重置",
-                                       command=lambda: self.gui.action("restart"))
-        self.btn_restart.pack(side=tk.RIGHT, padx=2)
-        # 行2：导航快捷键
-        r2 = ttk.Frame(bottom)
-        r2.pack(fill=tk.X)
-        ttk.Label(r2, text="Enter跟踪  ←→导航  Ctrl+←→跳标记  Tab切换物体  Backspace回退  Esc退出",
-                   font=("", 8)).pack(side=tk.LEFT)
-
-        # ── 日志栏（倒数第二行）──
+        # ── 日志栏（Row 7, minsize=170 — 不可压缩）──
         log_frame = tk.Frame(self.root, bg="#f0f0e0", relief=tk.SUNKEN, bd=1)
-        log_frame.pack(fill=tk.X, padx=3, pady=(1, 0), side=tk.BOTTOM)
+        log_frame.grid(row=7, column=0, sticky="ew", padx=3, pady=(1, 0))
         self._log_text = tk.Text(log_frame, height=10, font=("微软雅黑", 8), fg="#444444",
                                  bg="#f0f0e0", wrap=tk.WORD, state=tk.DISABLED, relief=tk.FLAT,
                                  bd=0, padx=3, pady=1)
@@ -144,6 +134,21 @@ class ControlPanel:
         self._log_text.configure(yscrollcommand=log_sb.set)
         self._log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         log_sb.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # ── 快捷键 + 操作按钮（Row 8, minsize=48 — 不可压缩）──
+        bottom = ttk.Frame(self.root)
+        bottom.grid(row=8, column=0, sticky="ew", padx=3, pady=1)
+        r1 = ttk.Frame(bottom)
+        r1.pack(fill=tk.X)
+        ttk.Label(r1, text="P预览 K标记 I间隔 R范围 B背景  V视图 S保存",
+                   font=("", 8)).pack(side=tk.LEFT)
+        self.btn_restart = ttk.Button(r1, text="↺ 重置",
+                                       command=lambda: self.gui.action("restart"))
+        self.btn_restart.pack(side=tk.RIGHT, padx=2)
+        r2 = ttk.Frame(bottom)
+        r2.pack(fill=tk.X)
+        ttk.Label(r2, text="Enter跟踪  ←→导航  Ctrl+←→跳标记  Tab切换物体  Backspace回退  Esc退出",
+                   font=("", 8)).pack(side=tk.LEFT)
 
     # ==================================================================
     # 动态控件（每次 rebuild 重建）
