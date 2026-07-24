@@ -25,7 +25,7 @@ class ControlPanel:
         self.root.title("控制面板 — 频闪图像生成器")
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.resizable(True, True)
-        self.root.minsize(360, 500)
+        self.root.minsize(360, 620)
         self.root.geometry(f"{PANEL_WIDTH}x{PANEL_HEIGHT}+50+50")
         self.root.lift()
         # ★ bind_all 确保 Entry 等控件获焦时快捷键也生效
@@ -122,7 +122,7 @@ class ControlPanel:
         # ── 日志栏（可滚动文本框，底部第二行）──
         log_frame = tk.Frame(self.root, bg="#f0f0e0", relief=tk.SUNKEN, bd=1)
         log_frame.pack(fill=tk.X, padx=3, pady=(1, 0), side=tk.BOTTOM)
-        self._log_text = tk.Text(log_frame, height=3, font=("微软雅黑", 8), fg="#444444",
+        self._log_text = tk.Text(log_frame, height=4, font=("微软雅黑", 8), fg="#444444",
                                  bg="#f0f0e0", wrap=tk.WORD, state=tk.DISABLED, relief=tk.FLAT,
                                  bd=0, padx=3, pady=1)
         log_sb = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=self._log_text.yview)
