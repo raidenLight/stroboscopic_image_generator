@@ -356,8 +356,10 @@ class StroboscopicGUI:
 
         elif name == "set_bg":
             self.background_frame_idx = self.current_frame_idx
+            self.composite_frames.add(self.current_frame_idx)
+            self._data_version += 1
             self._preview_dirty = True
-            self._set_status(f"背景设为第 {self.current_frame_idx} 帧", "info")
+            self._set_status(f"背景设为第 {self.current_frame_idx} 帧（已自动标记）", "info")
 
         elif name in ("view_mask", "view_composite", "view_original"):
             self.viz_mode = name.split("_")[1]
