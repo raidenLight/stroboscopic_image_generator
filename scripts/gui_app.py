@@ -327,14 +327,24 @@ class StroboscopicGUI:
 
         elif name == "apply_interval":
             if self.state == GUIState.EDIT:
-                interval_sec = self.panel._interval_value.get() if self.panel else 1.5
+                try:
+                    interval_sec = float(self.panel._interval_str.get()) if self.panel else 1.5
+                    r_start = int(self.panel._range_start_str.get()) if self.panel else 0
+                    r_end = int(self.panel._range_end_str.get()) if self.panel else self.n_frames - 1
+                except ValueError:
+                    self._set_status("间隔参数格式错误", "error")
+                    return
+                r_start = max(0, min(r_start, self.n_frames - 1))
+                r_end = max(0, min(r_end, self.n_frames - 1))
+                if r_start > r_end:
+                    r_start, r_end = r_end, r_start
                 fps = max(self.fps, 1)
                 step = max(1, int(round(interval_sec * fps)))
                 count = 0
-                for f in range(0, self.n_frames, step):
+                for f in range(r_start, r_end + 1, step):
                     self.composite_frames.add(f)
                     count += 1
-                self._set_status(f"间隔 {interval_sec}秒：已添加 {count} 帧。", "info")
+                self._set_status(f"间隔 {interval_sec}秒 ({r_start}→{r_end})：已添加 {count} 帧。", "info")
                 self._preview_dirty = True
 
         elif name == "set_bg":
@@ -345,22 +355,6 @@ class StroboscopicGUI:
         elif name in ("view_mask", "view_composite", "view_original"):
             self.viz_mode = name.split("_")[1]
             self._preview_dirty = True
-
-        elif name == "apply_vis_range":
-            obj = self.active_object()
-            if obj and self.panel and hasattr(self.panel, "vis_start_var"):
-                obj.vis_start = self.panel.vis_start_var.get()
-                obj.vis_end = self.panel.vis_end_var.get()
-                self._preview_dirty = True
-                self._set_status(f"{obj.name} 可见范围: {obj.vis_start}→{obj.vis_end}", "info")
-
-        elif name == "reset_vis_range":
-            obj = self.active_object()
-            if obj:
-                obj.vis_start = None
-                obj.vis_end = None
-                self._preview_dirty = True
-                self._set_status(f"{obj.name} 可见范围已重置为全部帧", "info")
 
         elif name == "preview_frame":
             self._do_single_frame_preview()
@@ -568,19 +562,6 @@ class StroboscopicGUI:
                 self.action("preview_frame")
             elif key == ord("r") or key == ord("R"):
                 self.action("range_select")
-            elif key == ord("["):
-                obj = self.active_object()
-                if obj:
-                    obj.vis_start = self.current_frame_idx
-                    self._preview_dirty = True
-            elif key == ord("]"):
-                obj = self.active_object()
-                if obj:
-                    obj.vis_end = self.current_frame_idx
-                    self._preview_dirty = True
-            elif key == ord("\\"):
-                self.action("reset_vis_range")
-
         # ── TRACKING 态专用键 ──
         elif self.state == GUIState.TRACKING:
             if key_raw == 27:
