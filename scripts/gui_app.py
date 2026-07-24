@@ -607,6 +607,7 @@ class StroboscopicGUI:
                     obj.points.append((x, y))
                     obj._dirty = True
                     self._preview_dirty = True
+                    self._show_points_overlay = True  # 新加点时恢复显示
 
     # ==================================================================
     # Frame helpers
@@ -879,6 +880,7 @@ class StroboscopicGUI:
                     if m.any():
                         self._preview_mask = m
                         self._preview_mask_obj_id = obj.obj_id
+                        self._show_points_overlay = False  # 预览成功后隐藏选点
                         self._set_status(f"预览: {obj.name} | 帧 {self.current_frame_idx}", "success")
                     else:
                         self._preview_mask = None
