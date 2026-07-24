@@ -188,7 +188,22 @@ class ControlPanel:
         self.view_var = tk.StringVar(value=self.gui.viz_mode)
         for mode, label in [("mask", "Mask"), ("composite", "合成"), ("original", "原图")]:
             ttk.Radiobutton(self.view_inner, text=label, variable=self.view_var, value=mode,
-                            command=lambda m=mode: self.gui.action("view_" + m)).pack(side=tk.LEFT, padx=4)
+                            command=lambda m=mode: self.gui.action("view_" + m)).pack(side=tk.LEFT, padx=3)
+        ttk.Separator(self.view_inner, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=4)
+        ttk.Label(self.view_inner, text="mask阈值:").pack(side=tk.LEFT)
+        self._threshold_str = tk.StringVar(value=f"{self.gui.args.mask_threshold:.2f}")
+        ttk.Entry(self.view_inner, textvariable=self._threshold_str, width=4).pack(side=tk.LEFT, padx=2)
+        ttk.Button(self.view_inner, text="✓", width=2, command=self._apply_threshold).pack(side=tk.LEFT)
+
+    def _apply_threshold(self):
+        try:
+            v = float(self._threshold_str.get())
+            if 0.0 <= v <= 1.0:
+                self.gui.args.mask_threshold = v
+                self.gui._preview_dirty = True
+                self.log(f"mask阈值={v:.2f}")
+        except ValueError:
+            pass
 
     # ── 帧选取 ──
     def _build_select_section(self) -> None:
