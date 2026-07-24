@@ -57,10 +57,10 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--video", type=Path, default=DEFAULT_VIDEO, help="输入视频路径")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT, help="输出图像路径")
-    parser.add_argument("--process-fps", type=float, default=None,
+    parser.add_argument("--process-fps", type=float, default=10,
                         help="处理帧率，低于源帧率可减少内存占用")
     parser.add_argument("--alpha", type=float, default=0.60, help="合成透明度 (0.0~1.0)")
-    parser.add_argument("--mask-threshold", type=float, default=0.0, help="mask 阈值，越高 mask 越紧")
+    parser.add_argument("--mask-threshold", type=float, default=0.2, help="mask 阈值，越高 mask 越紧")
     parser.add_argument("--dilate-kernel", type=int, default=5, help="mask 膨胀核大小 (0=不膨胀)")
     parser.add_argument("--min-area", type=int, default=300, help="最小连通区域面积（像素）")
     parser.add_argument("--device", choices=("auto", "cuda", "cpu", "mps"), default="auto",

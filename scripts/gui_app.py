@@ -123,6 +123,8 @@ class StroboscopicGUI:
 
         # ── trackbar ──
         self._trackbar_locked = False
+        self._playing = False
+        self._play_btn_rect: tuple[int, int, int, int] | None = None
 
         self.args = args
         self.tmp_dir = tmp_dir
@@ -474,6 +476,12 @@ class StroboscopicGUI:
                 self.panel.destroy()
                 return
 
+            # ★ 自动播放
+            if self._playing and self.state == GUIState.EDIT:
+                self.current_frame_idx = (self.current_frame_idx + 1) % self.n_frames
+                self._preview_dirty = True
+                self._preview_mask = None
+
             # 键盘输入
             key_raw = cv2.pollKey()
             if key_raw >= 0:
@@ -608,10 +616,18 @@ class StroboscopicGUI:
     def _on_mouse(self, event: int, x: int, y: int, _flags: int, _param: object) -> None:
         if self.state != GUIState.EDIT:
             return
-        # ★ 时间线区域：点击或拖拽跳转帧
+        # ★ 时间线区域：点击/拖拽跳转帧 或 播放按钮
         if (event == cv2.EVENT_LBUTTONDOWN or
             (event == cv2.EVENT_MOUSEMOVE and _flags & cv2.EVENT_FLAG_LBUTTON)):
             if self.h <= y < self.h + TIMELINE_H:
+                # 播放按钮检测
+                if self._play_btn_rect is not None:
+                    bx, by, bw, bh = self._play_btn_rect
+                    if bx <= x <= bx + bw and by <= y <= by + bh:
+                        if event == cv2.EVENT_LBUTTONDOWN:
+                            self._playing = not self._playing
+                        return
+                # 时间线拖拽
                 fidx = int(x * self.n_frames / max(self.w, 1))
                 self.current_frame_idx = max(0, min(fidx, self.n_frames - 1))
                 self._preview_dirty = True
@@ -1152,5 +1168,21 @@ def _draw_timeline_on_canvas(gui: StroboscopicGUI, canvas: np.ndarray) -> np.nda
     marked_info = f"Marked: {len(gui.composite_frames)}"
     cv2.putText(out, marked_info, (5, y0 + TIMELINE_H - 3),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.35, (200, 200, 200), 1, cv2.LINE_AA)
+
+    # ── 播放/暂停按钮（右下角）──
+    bx, by = w - 26, y0 + bar_h + mid_h + 1
+    bw, bh = 24, 14
+    cv2.rectangle(out, (bx, by), (bx + bw, by + bh), (80, 80, 80), -1)
+    cv2.rectangle(out, (bx, by), (bx + bw, by + bh), (180, 180, 180), 1)
+    if gui._playing:
+        # 暂停图标：两条竖线
+        cv2.rectangle(out, (bx + 6, by + 3), (bx + 10, by + bh - 4), (220, 220, 220), -1)
+        cv2.rectangle(out, (bx + 14, by + 3), (bx + 18, by + bh - 4), (220, 220, 220), -1)
+    else:
+        # 播放图标：三角形
+        pts = np.array([[bx + 7, by + 3], [bx + 7, by + bh - 4], [bx + 18, by + bh // 2]], np.int32)
+        cv2.fillPoly(out, [pts], (180, 220, 180))
+    # 存储按钮区域供点击检测
+    gui._play_btn_rect = (bx, by, bw, bh)
 
     return out

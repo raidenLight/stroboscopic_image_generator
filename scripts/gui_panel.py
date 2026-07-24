@@ -188,7 +188,7 @@ class ControlPanel:
                             command=lambda m=mode: self.gui.action("view_" + m)).pack(side=tk.LEFT, padx=3)
         ttk.Separator(self.view_inner, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=4)
         ttk.Label(self.view_inner, text="mask阈值:").pack(side=tk.LEFT)
-        self._threshold_str = tk.StringVar(value=f"{self.gui.args.mask_threshold:.2f}")
+        self._threshold_str = tk.StringVar(value="0.20")
         ttk.Entry(self.view_inner, textvariable=self._threshold_str, width=4).pack(side=tk.LEFT, padx=2)
         ttk.Button(self.view_inner, text="✓", width=2, command=self._apply_threshold).pack(side=tk.LEFT)
 
