@@ -272,19 +272,30 @@ class ControlPanel:
         inner.bind("<MouseWheel>", _wheel)
         cvs.bind("<Enter>", lambda e: cvs.focus_set())
 
+        # ── 列布局: [行选] [帧标签(expand)] [obj1] [obj2]... [α] [✕] ──
+        # Col 0: 行选择框
+        # Col 1: 帧标签 (weight=1)
+        # Col 2..n_objs+1: 物体选择框
+        # Col n_objs+2: alpha
+        # Col n_objs+3: 删除
+        inner.columnconfigure(1, weight=1)  # 帧标签列扩展，吸收空白空间
+
         # ── 头行 ──
-        inner.columnconfigure(0, weight=1)  # 帧标签列扩展，吸收空白空间
+        hdr_row_cb_var = tk.BooleanVar(value=True)
+        hdr_row_cb = ttk.Checkbutton(inner, variable=hdr_row_cb_var,
+                                      command=lambda: self._toggle_all_rows(hdr_row_cb_var.get()))
+        hdr_row_cb.grid(row=0, column=0)
         ttk.Label(inner, text=f"帧 / 时间 ({count})", font=("", 8, "bold"), anchor=tk.W).grid(
-            row=0, column=0, sticky="ew")
+            row=0, column=1, sticky="ew")
         for j, obj in enumerate(objs):
             cb_var = tk.BooleanVar(value=True)
             cb = ttk.Checkbutton(inner, variable=cb_var)
-            cb.grid(row=0, column=j + 1)
+            cb.grid(row=0, column=j + 2)
             cb.configure(command=lambda oid=obj.obj_id, v=cb_var: self._toggle_all_frames(oid, v.get()))
             ttk.Label(inner, text=obj.name[:3], foreground=obj.color_hex, font=("", 6)).grid(
-                row=0, column=j + 1, sticky="s", pady=(14, 0))
+                row=0, column=j + 2, sticky="s", pady=(14, 0))
         ttk.Label(inner, text="α", width=4, anchor=tk.CENTER, font=("", 8, "bold")).grid(
-            row=0, column=n_objs + 1)
+            row=0, column=n_objs + 2)
 
         # ── 数据行 ──
         for i, fidx in enumerate(all_rows):
@@ -294,10 +305,20 @@ class ControlPanel:
             is_bg = (fidx == self.gui.background_frame_idx)
             label_text = f" 帧{fidx} {ts}s" + (" [BG]" if is_bg else "")
 
+            # ★ 行选择框（最左边）— 勾选=加入合成帧，取消=移除
+            row_cb_var = tk.BooleanVar(value=True)
+            row_cb = ttk.Checkbutton(inner, variable=row_cb_var,
+                                      command=lambda f=fidx, v=row_cb_var: (
+                                          self.gui.composite_frames.add(f) if v.get()
+                                          else self.gui.composite_frames.discard(f),
+                                          setattr(self.gui, '_preview_dirty', True)
+                                      ))
+            row_cb.grid(row=row, column=0)
+
             lbl = ttk.Label(inner, text=label_text,
                            foreground="#CC6600" if is_bg else "black",
                            font=("", 8, "bold" if is_bg else "normal"))
-            lbl.grid(row=row, column=0, sticky="w")
+            lbl.grid(row=row, column=1, sticky="w")
             # 双击跳转到该帧
             lbl.bind("<Double-1>", lambda e, f=fidx: self._jump_to_frame(f))
 
@@ -308,32 +329,42 @@ class ControlPanel:
                 if has_mask:
                     var = tk.BooleanVar(value=checked)
                     cb = ttk.Checkbutton(inner, variable=var)
-                    cb.grid(row=row, column=j + 1)
+                    cb.grid(row=row, column=j + 2)
                     cb.configure(command=lambda f=fidx, o=obj.obj_id: (
                         setattr(self.gui, '_preview_dirty', True),
                         self.gui.action("toggle_frame_object_at", f, o)
                     ))
                 else:
-                    ttk.Label(inner, text="—", font=("", 7)).grid(row=row, column=j + 1)
+                    ttk.Label(inner, text="—", font=("", 7)).grid(row=row, column=j + 2)
 
             # Alpha
             cur_a = self.gui.get_frame_alpha(fidx)
             a_var = tk.StringVar(value=f"{cur_a:.2f}")
             a_entry = ttk.Entry(inner, width=5, textvariable=a_var, font=("", 8))
-            a_entry.grid(row=row, column=n_objs + 1, padx=1)
+            a_entry.grid(row=row, column=n_objs + 2, padx=1)
             a_entry.bind("<Return>", lambda e, f=fidx: self._apply_frame_alpha(f, e.widget))
 
             # 删除
             ttk.Button(inner, text="✕", width=2, command=lambda f=fidx: (
                 self.gui.composite_frames.discard(f),
                 setattr(self.gui, '_preview_dirty', True)
-            )).grid(row=row, column=n_objs + 2)
+            )).grid(row=row, column=n_objs + 3)
 
     def _jump_to_frame(self, fidx: int) -> None:
         """双击帧列表跳转到该帧。"""
         self.gui.current_frame_idx = fidx
         self.gui._preview_dirty = True
         self.gui._preview_mask = None
+
+    def _toggle_all_rows(self, show: bool) -> None:
+        """行选全选/全不选：切换所有合成帧的标记状态。"""
+        if show:
+            # 全选：恢复所有已有标记帧（无法恢复已删除的帧，因为 composite_frames 是 set）
+            pass  # 已显示的行默认都是 checked，无需操作
+        else:
+            self.gui.composite_frames.clear()
+            self.gui.frame_overrides.clear()
+        self.gui._preview_dirty = True
 
     def _toggle_all_frames(self, obj_id: int, show: bool) -> None:
         for fidx in self.gui.composite_frames:
