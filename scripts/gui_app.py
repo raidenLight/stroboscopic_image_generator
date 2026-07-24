@@ -623,10 +623,11 @@ class StroboscopicGUI:
                 # ★ 选点模式未激活时忽略点击
                 if not self._point_mode_active:
                     return
-                # 如果无物体，自动创建一个
-                if not self.objects:
-                    self.action("new_object")
+                # 无物体 → 自动创建；活跃物体已保存 → 自动创建下一个
                 obj = self.active_object()
+                if obj is None or (obj.points and not obj._dirty):
+                    self.action("new_object")
+                    obj = self.active_object()
                 if obj:
                     # 第一个点 → 设置 seed_frame
                     if not obj.points:
@@ -907,8 +908,9 @@ class StroboscopicGUI:
                     if m.any():
                         self._preview_mask = m
                         self._preview_mask_obj_id = obj.obj_id
-                        self._show_points_overlay = False  # 预览成功后隐藏选点
-                        self._set_status(f"预览: {obj.name} | 帧 {self.current_frame_idx}", "success")
+                        self._show_points_overlay = False
+                        obj._dirty = False  # 预览成功 → 物体已保存
+                        self._set_status(f"{obj.name} 已保存 | 帧 {self.current_frame_idx}", "success")
                     else:
                         self._preview_mask = None
                         self._set_status("预览：mask 为空，请调整跟踪点。", "warn")

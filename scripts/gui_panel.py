@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from gui_app import StroboscopicGUI
 
 PANEL_WIDTH = 430
-PANEL_HEIGHT = 640
+PANEL_HEIGHT = 700
 
 
 class ControlPanel:
@@ -168,10 +168,8 @@ class ControlPanel:
     def _build_edit_actions(self) -> None:
         r = ttk.Frame(self.actions_inner)
         r.pack(fill=tk.X)
-        ttk.Button(r, text="+ 新建 (N)", command=lambda: self.gui.action("new_object")).pack(
-            side=tk.LEFT, padx=1, fill=tk.X, expand=True)
         ttk.Button(r, text="👁 保存并预览 (P)", command=lambda: self.gui.action("preview_frame")).pack(
-            side=tk.LEFT, padx=1, fill=tk.X, expand=True)
+            side=tk.LEFT, padx=1, fill=tk.X, expand=True, ipadx=8)
 
         dirty = [o for o in self.gui.objects if o._dirty and o.points]
         if dirty:
