@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 """
-Interactive GUI for stroboscopic image generation with SAM2 multi-object tracking.
+频闪图像生成器 — SAM2 多物体跟踪交互式 GUI
 
-Dual-window architecture:
-  - OpenCV window: video display + timeline + mask/point overlays
-  - tkinter panel: native buttons, sliders, labels for all controls (zero extra deps)
+双窗口架构：
+  - OpenCV 窗口：视频帧 + 时间线 + mask/选点叠加
+  - tkinter 面板：原生按钮、滑块、标签（Python 内置，零额外依赖）
 
-Workflow:
-  1. SETUP:  mark one or more objects on any frames, click points, press Start.
-  2. TRACKING: SAM2 tracks all objects forward+backward simultaneously.
-  3. SELECTION: mark frames (K / interval / range), set visibility per object,
-                toggle preview, save composite.
+工作流程：
+  1. 设置：在任意帧标记一个或多个物体，点击选点，按"开始跟踪"
+  2. 跟踪：SAM2 同时向前+向后跟踪所有物体
+  3. 选择：标记合成帧（K键/间隔/范围），设置每个物体的可见范围，切换预览，保存
 """
 
 from __future__ import annotations
@@ -108,14 +107,14 @@ class ControlPanel:
     def __init__(self, gui: 'StroboscopicGUI'):
         self.gui = gui
         self.root = tk.Tk()
-        self.root.title("Controls — Stroboscopic Generator")
+        self.root.title("控制面板 — 频闪图像生成器")
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.resizable(True, True)
-        self.root.geometry("320x620+50+50")  # positioned away from video
-        self.root.attributes('-topmost', True)  # always visible
+        self.root.geometry("320x620+50+50")  # 放在屏幕左上角，不遮挡视频
+        self.root.attributes('-topmost', True)  # 始终可见
         self.root.lift()
-        # NOTE: do NOT focus_force() — let OpenCV keep keyboard focus
-        # Release topmost after 3s so it doesn't block other apps
+        # 注意：不要 focus_force()，让 OpenCV 窗口保持键盘焦点
+        # 3 秒后取消置顶，避免挡住其他应用
         self.root.after(3000, lambda: self.root.attributes('-topmost', False))
 
         # Bind keyboard events -> forward to GUI so both windows work
@@ -139,52 +138,52 @@ class ControlPanel:
     # Static widgets (always present)
     # ------------------------------------------------------------------
     def _build_static(self) -> None:
-        # -- Status --
-        frm = ttk.LabelFrame(self.root, text="Status", padding=5)
+        # -- 状态 --
+        frm = ttk.LabelFrame(self.root, text="状态", padding=5)
         frm.pack(fill=tk.X, padx=5, pady=2)
-        self.lbl_state = ttk.Label(frm, text="SETUP", font=("", 10, "bold"))
+        self.lbl_state = ttk.Label(frm, text="设置", font=("", 10, "bold"))
         self.lbl_state.pack(anchor=tk.W)
-        self.lbl_frame = ttk.Label(frm, text="Frame: 0 / 0")
+        self.lbl_frame = ttk.Label(frm, text="帧: 0 / 0")
         self.lbl_frame.pack(anchor=tk.W)
-        self.lbl_active = ttk.Label(frm, text="Active: —")
+        self.lbl_active = ttk.Label(frm, text="活跃物体: —")
         self.lbl_active.pack(anchor=tk.W)
 
-        # -- Objects --
-        self.frm_objects = ttk.LabelFrame(self.root, text="Objects", padding=5)
+        # -- 物体 --
+        self.frm_objects = ttk.LabelFrame(self.root, text="物体", padding=5)
         self.frm_objects.pack(fill=tk.X, padx=5, pady=2)
         self.obj_buttons_frame = ttk.Frame(self.frm_objects)
         self.obj_buttons_frame.pack(fill=tk.X)
-        self.btn_new_obj = ttk.Button(self.frm_objects, text="+ New Object",
+        self.btn_new_obj = ttk.Button(self.frm_objects, text="+ 新建物体",
                                        command=lambda: self.gui.action("new_object"))
         self.btn_new_obj.pack(fill=tk.X, pady=2)
 
-        # -- Actions --
-        self.frm_actions = ttk.LabelFrame(self.root, text="Actions", padding=5)
+        # -- 操作 --
+        self.frm_actions = ttk.LabelFrame(self.root, text="操作", padding=5)
         self.frm_actions.pack(fill=tk.X, padx=5, pady=2)
         self.actions_frame = ttk.Frame(self.frm_actions)
         self.actions_frame.pack(fill=tk.X)
 
-        # -- View mode --
-        self.frm_view = ttk.LabelFrame(self.root, text="View", padding=5)
+        # -- 视图模式 --
+        self.frm_view = ttk.LabelFrame(self.root, text="视图", padding=5)
         self.frm_view.pack(fill=tk.X, padx=5, pady=2)
         self.view_var = tk.StringVar(value="mask")
         self.view_frame = ttk.Frame(self.frm_view)
         self.view_frame.pack(fill=tk.X)
-        for mode, label in [("mask", "Mask"), ("composite", "Composite"), ("original", "Original")]:
+        for mode, label in [("mask", "Mask覆盖"), ("composite", "合成预览"), ("original", "原始帧")]:
             ttk.Radiobutton(self.view_frame, text=label, variable=self.view_var,
                             value=mode, command=lambda m=mode: self.gui.action("view_" + m)
                             ).pack(side=tk.LEFT, padx=3)
 
-        # -- Keyboard hints --
-        frm_keys = ttk.LabelFrame(self.root, text="Keyboard Shortcuts", padding=5)
+        # -- 快捷键提示 --
+        frm_keys = ttk.LabelFrame(self.root, text="快捷键", padding=5)
         frm_keys.pack(fill=tk.X, padx=5, pady=2)
-        ttk.Label(frm_keys, text="←→ Nav  |  K Mark  |  B BG  |  V View  |  S Save",
+        ttk.Label(frm_keys, text="←→ 导航 | K 标记帧 | B 背景 | V 视图 | S 保存",
                    font=("", 8)).pack(anchor=tk.W)
-        ttk.Label(frm_keys, text="N New  |  1-9 Obj  |  Enter Track  |  Esc Quit",
+        ttk.Label(frm_keys, text="N 新建 | 1-9 选物体 | Enter 跟踪 | Esc 退出",
                    font=("", 8)).pack(anchor=tk.W)
 
-        # -- Quit --
-        ttk.Button(self.root, text="Quit (Esc)", command=lambda: self.gui.action("quit"))\
+        # -- 退出 --
+        ttk.Button(self.root, text="退出 (Esc)", command=lambda: self.gui.action("quit"))\
             .pack(fill=tk.X, padx=5, pady=5)
 
     # ------------------------------------------------------------------
@@ -215,13 +214,13 @@ class ControlPanel:
             self._build_vis_range(editable=True)
 
     def _build_setup_actions(self) -> None:
-        ttk.Button(self.actions_frame, text="✕ Clear Points",
+        ttk.Button(self.actions_frame, text="✕ 清除选点",
                    command=lambda: self.gui.action("clear_points"))\
             .pack(fill=tk.X, pady=1)
-        btn = ttk.Button(self.actions_frame, text="▶ Start Tracking",
+        btn = ttk.Button(self.actions_frame, text="▶ 开始跟踪",
                           command=lambda: self.gui.action("start_tracking"))
         btn.pack(fill=tk.X, pady=3)
-        # Disable if no objects have points
+        # 没有物体有点时禁用
         if not any(obj.points for obj in self.gui.objects):
             btn.configure(state=tk.DISABLED)
 
@@ -233,30 +232,30 @@ class ControlPanel:
         self.progress_bar.pack(fill=tk.X, pady=2)
         self.lbl_progress = ttk.Label(self.actions_frame, text="0%")
         self.lbl_progress.pack()
-        ttk.Button(self.actions_frame, text="Abort (Esc)",
+        ttk.Button(self.actions_frame, text="中止 (Esc)",
                    command=lambda: self.gui.action("abort_tracking"))\
             .pack(fill=tk.X, pady=2)
 
     def _build_selection_actions(self) -> None:
-        # Mark frame
+        # 标记帧
         marked = self.gui.current_frame_idx in self.gui.composite_frames
-        mark_text = "✓ Mark Frame" if marked else "K Mark Frame"
+        mark_text = "✓ 已标记" if marked else "K 标记此帧"
         ttk.Button(self.actions_frame, text=mark_text,
                    command=lambda: self.gui.action("mark_frame"))\
             .pack(fill=tk.X, pady=1)
 
-        # Range selection
-        rng_text = "R Range Select"
+        # 范围选择
+        rng_text = "R 范围选择"
         if self.gui._range_start is not None:
-            rng_text = f"R Range: {self.gui._range_start}→?"
+            rng_text = f"R 范围: {self.gui._range_start}→?"
         ttk.Button(self.actions_frame, text=rng_text,
                    command=lambda: self.gui.action("range_select"))\
             .pack(fill=tk.X, pady=1)
 
-        # Interval
+        # 间隔选择
         frm_int = ttk.Frame(self.actions_frame)
         frm_int.pack(fill=tk.X, pady=2)
-        ttk.Label(frm_int, text="Interval:").pack(side=tk.LEFT)
+        ttk.Label(frm_int, text="间隔:").pack(side=tk.LEFT)
         scale = ttk.Scale(frm_int, from_=0.1, to=10.0, variable=self._interval_value,
                           orient=tk.HORIZONTAL, length=120)
         scale.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=3)
@@ -266,43 +265,43 @@ class ControlPanel:
         frm_int2.pack(fill=tk.X, pady=1)
         fps = max(self.gui.fps, 1)
         n_selected = int(self.gui.n_frames / max(fps * self._interval_value.get(), 0.1))
-        self.lbl_interval_count = ttk.Label(frm_int2, text=f"~{n_selected} frames")
+        self.lbl_interval_count = ttk.Label(frm_int2, text=f"~{n_selected} 帧")
         self.lbl_interval_count.pack(side=tk.LEFT)
-        ttk.Button(frm_int2, text="Apply Interval",
+        ttk.Button(frm_int2, text="应用间隔",
                    command=lambda: self.gui.action("apply_interval"))\
             .pack(side=tk.RIGHT)
 
-        # Background
-        ttk.Button(self.actions_frame, text=f"B Set BG (current: {self.gui.background_frame_idx})",
+        # 背景
+        ttk.Button(self.actions_frame, text=f"B 设为背景 (当前: {self.gui.background_frame_idx})",
                    command=lambda: self.gui.action("set_bg"))\
             .pack(fill=tk.X, pady=1)
 
-        # Save & Restart
-        ttk.Button(self.actions_frame, text="S Save Composite",
+        # 保存 & 重来
+        ttk.Button(self.actions_frame, text="S 保存合成图",
                    command=lambda: self.gui.action("save"))\
             .pack(fill=tk.X, pady=3)
-        ttk.Button(self.actions_frame, text="↺ Restart",
+        ttk.Button(self.actions_frame, text="↺ 重新开始",
                    command=lambda: self.gui.action("restart"))\
             .pack(fill=tk.X, pady=1)
 
-        # Composite count
+        # 合成帧数
         ttk.Label(self.actions_frame,
-                  text=f"Marked: {len(self.gui.composite_frames)} frames")\
+                  text=f"已标记: {len(self.gui.composite_frames)} 帧")\
             .pack(anchor=tk.W, pady=2)
 
     def _build_vis_range(self, editable: bool) -> None:
-        """Build visibility range controls for the active object."""
+        """构建活跃物体的可见范围控件。"""
         if hasattr(self, 'frm_vis'):
             self.frm_vis.destroy()
-        self.frm_vis = ttk.LabelFrame(self.root, text="Visibility Range", padding=5)
+        self.frm_vis = ttk.LabelFrame(self.root, text="可见范围", padding=5)
         self.frm_vis.pack(fill=tk.X, padx=5, pady=2, after=self.frm_actions)
 
         if not self.gui.objects:
-            ttk.Label(self.frm_vis, text="No objects").pack()
+            ttk.Label(self.frm_vis, text="无物体").pack()
             return
 
         obj = self.gui.active_object()
-        ttk.Label(self.frm_vis, text=f"Active: {obj.name}", foreground=obj.color_hex)\
+        ttk.Label(self.frm_vis, text=f"活跃: {obj.name}", foreground=obj.color_hex)\
             .pack(anchor=tk.W)
 
         n = max(self.gui.n_frames - 1, 1)
@@ -311,7 +310,7 @@ class ControlPanel:
 
         frm1 = ttk.Frame(self.frm_vis)
         frm1.pack(fill=tk.X)
-        ttk.Label(frm1, text="Start:").pack(side=tk.LEFT)
+        ttk.Label(frm1, text="起始:").pack(side=tk.LEFT)
         s1 = ttk.Scale(frm1, from_=0, to=n, variable=self.vis_start_var,
                        orient=tk.HORIZONTAL, length=160)
         s1.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=3)
@@ -321,7 +320,7 @@ class ControlPanel:
 
         frm2 = ttk.Frame(self.frm_vis)
         frm2.pack(fill=tk.X)
-        ttk.Label(frm2, text="End:  ").pack(side=tk.LEFT)
+        ttk.Label(frm2, text="结束:").pack(side=tk.LEFT)
         s2 = ttk.Scale(frm2, from_=0, to=n, variable=self.vis_end_var,
                        orient=tk.HORIZONTAL, length=160)
         s2.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=3)
@@ -332,9 +331,9 @@ class ControlPanel:
         if editable:
             def apply_vis():
                 self.gui.action("apply_vis_range")
-            ttk.Button(self.frm_vis, text="Apply Range",
+            ttk.Button(self.frm_vis, text="应用范围",
                        command=apply_vis).pack(fill=tk.X, pady=2)
-            ttk.Button(self.frm_vis, text="Reset to Full Range",
+            ttk.Button(self.frm_vis, text="重置为全部帧",
                        command=lambda: self.gui.action("reset_vis_range"))\
                 .pack(fill=tk.X)
 
@@ -360,21 +359,21 @@ class ControlPanel:
             self._build_dynamic()
 
         # Update status labels
-        state_names = {GUIState.SETUP: "SETUP", GUIState.TRACKING: "TRACKING",
-                       GUIState.SELECTION: "SELECTION", GUIState.SAVE: "SAVED"}
+        state_names = {GUIState.SETUP: "设置", GUIState.TRACKING: "跟踪中",
+                       GUIState.SELECTION: "选择", GUIState.SAVE: "已保存"}
         self.lbl_state.configure(text=state_names.get(gui.state, "—"))
         self.lbl_frame.configure(
-            text=f"Frame: {gui.current_frame_idx} / {gui.n_frames}"
+            text=f"帧: {gui.current_frame_idx} / {gui.n_frames}"
         )
 
         if gui.active_object():
             obj = gui.active_object()
             n_pts = len(obj.points)
             self.lbl_active.configure(
-                text=f"Active: {obj.name} ({n_pts} pts, seed fr {obj.seed_frame})"
+                text=f"活跃: {obj.name} ({n_pts}点, 种子帧{obj.seed_frame})"
             )
         else:
-            self.lbl_active.configure(text="Active: —")
+            self.lbl_active.configure(text="活跃: —")
 
         # Button highlights for object buttons
         # Note: tk.Button uses bg/relief/font, NOT style (style is ttk-only)
@@ -512,25 +511,30 @@ class ControlPanel:
 # ---------------------------------------------------------------------------
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Interactive GUI for stroboscopic image generation with SAM2."
+        description="SAM2 多物体跟踪频闪图像生成器 — 交互式 GUI"
     )
-    parser.add_argument("--video", type=Path, default=DEFAULT_VIDEO)
-    parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
-    parser.add_argument("--process-fps", type=float, default=None)
-    parser.add_argument("--alpha", type=float, default=0.60)
-    parser.add_argument("--mask-threshold", type=float, default=0.0)
-    parser.add_argument("--dilate-kernel", type=int, default=5)
-    parser.add_argument("--min-area", type=int, default=300)
-    parser.add_argument("--device", choices=("auto", "cuda", "cpu", "mps"), default="auto")
-    parser.add_argument("--hf-model-id", type=str, default="facebook/sam2.1-hiera-small")
-    parser.add_argument("--model-cfg", type=str, default=None)
-    parser.add_argument("--checkpoint", type=Path, default=None)
-    parser.add_argument("--vos-optimized", action="store_true")
-    parser.add_argument("--offload-video-to-cpu", action=argparse.BooleanOptionalAction, default=True)
-    parser.add_argument("--offload-state-to-cpu", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--video", type=Path, default=DEFAULT_VIDEO, help="输入视频路径")
+    parser.add_argument("--out", type=Path, default=DEFAULT_OUT, help="输出图像路径")
+    parser.add_argument("--process-fps", type=float, default=None,
+                        help="处理帧率，低于源帧率可减少内存占用")
+    parser.add_argument("--alpha", type=float, default=0.60, help="合成透明度 (0.0~1.0)")
+    parser.add_argument("--mask-threshold", type=float, default=0.0, help="mask 阈值，越高 mask 越紧")
+    parser.add_argument("--dilate-kernel", type=int, default=5, help="mask 膨胀核大小 (0=不膨胀)")
+    parser.add_argument("--min-area", type=int, default=300, help="最小连通区域面积（像素）")
+    parser.add_argument("--device", choices=("auto", "cuda", "cpu", "mps"), default="auto",
+                        help="推理设备")
+    parser.add_argument("--hf-model-id", type=str, default="facebook/sam2.1-hiera-small",
+                        help="HuggingFace 模型 ID")
+    parser.add_argument("--model-cfg", type=str, default=None, help="SAM2 配置文件路径")
+    parser.add_argument("--checkpoint", type=Path, default=None, help="SAM2 权重文件路径")
+    parser.add_argument("--vos-optimized", action="store_true", help="启用 VOS 优化编译")
+    parser.add_argument("--offload-video-to-cpu", action=argparse.BooleanOptionalAction, default=True,
+                        help="将视频帧放在 CPU 内存（减少 GPU 显存）")
+    parser.add_argument("--offload-state-to-cpu", action=argparse.BooleanOptionalAction, default=False,
+                        help="将预测器状态放在 CPU 内存（更慢但更省 GPU 显存）")
     parser.add_argument("--max-dim", type=int, default=1280,
-                        help="Max frame dimension in pixels. Resize longer side to this limit. "
-                             "Lower = less RAM/VRAM. (default: 1280, use 720 or 960 if OOM)")
+                        help="帧最大尺寸（像素），长边超过此值会等比缩放。越小越省内存。"
+                             "默认 1280，内存不足时可尝试 720 或 960")
 
     args = parser.parse_args()
     if not 0.0 <= args.alpha <= 1.0:
@@ -599,7 +603,7 @@ class StroboscopicGUI:
         self.args = args
         self.tmp_dir = tmp_dir
 
-        # --- control panel ---
+        # --- 控制面板 ---
         self.panel: ControlPanel | None = None
 
     # ===================================================================
@@ -633,7 +637,7 @@ class StroboscopicGUI:
             self._quit_flag = True
         elif name == "new_object":
             self._create_object(seed_frame=self.current_frame_idx)
-            self.status_message = f"Created {self.active_object().name} at frame {self.current_frame_idx}"
+            self.status_message = f"已创建 {self.active_object().name}（种子帧 {self.current_frame_idx}）"
             self.status_timer = 60
         elif name == "select_object":
             idx = args[0] if args else 0
@@ -651,7 +655,7 @@ class StroboscopicGUI:
                 self._tracking_generator = None
                 self.masks.clear()
                 self.state = GUIState.SETUP
-                self.status_message = "Tracking aborted."
+                self.status_message = "跟踪已中止。"
                 self.status_timer = 60
         elif name == "mark_frame":
             if self.state == GUIState.SELECTION:
@@ -664,14 +668,14 @@ class StroboscopicGUI:
             if self.state == GUIState.SELECTION:
                 if self._range_start is None:
                     self._range_start = self.current_frame_idx
-                    self.status_message = f"Range start: {self._range_start}. Click again for end."
+                    self.status_message = f"范围起点: {self._range_start}。再点一次设终点。"
                     self.status_timer = 120
                 else:
                     start, end = sorted([self._range_start, self.current_frame_idx])
                     for f in range(start, end + 1):
                         self.composite_frames.add(f)
                     self._range_start = None
-                    self.status_message = f"Range {start}→{end}: {end - start + 1} frames added."
+                    self.status_message = f"范围 {start}→{end}：已添加 {end - start + 1} 帧。"
                     self.status_timer = 90
                     self._preview_dirty = True
         elif name == "apply_interval":
@@ -683,14 +687,14 @@ class StroboscopicGUI:
                 for f in range(0, self.n_frames, step):
                     self.composite_frames.add(f)
                     count += 1
-                self.status_message = f"Interval {interval_sec}s: {count} frames added."
+                self.status_message = f"间隔 {interval_sec}秒：已添加 {count} 帧。"
                 self.status_timer = 90
                 self._preview_dirty = True
         elif name == "set_bg":
             if self.state == GUIState.SELECTION:
                 self.background_frame_idx = self.current_frame_idx
                 self._preview_dirty = True
-                self.status_message = f"Background: frame {self.current_frame_idx}"
+                self.status_message = f"背景设为第 {self.current_frame_idx} 帧"
                 self.status_timer = 60
         elif name in ("view_mask", "view_composite", "view_original"):
             self.viz_mode = name.split("_")[1]
@@ -700,7 +704,7 @@ class StroboscopicGUI:
                 obj.vis_start = self.panel.vis_start_var.get()
                 obj.vis_end = self.panel.vis_end_var.get()
                 self._preview_dirty = True
-                self.status_message = f"{obj.name} visible: {obj.vis_start}→{obj.vis_end}"
+                self.status_message = f"{obj.name} 可见范围: {obj.vis_start}→{obj.vis_end}"
                 self.status_timer = 60
         elif name == "reset_vis_range":
             obj = self.active_object()
@@ -708,18 +712,18 @@ class StroboscopicGUI:
                 obj.vis_start = None
                 obj.vis_end = None
                 self._preview_dirty = True
-                self.status_message = f"{obj.name} visible: all frames"
+                self.status_message = f"{obj.name} 可见范围已重置为全部帧"
                 self.status_timer = 60
         elif name == "save":
             if self.state == GUIState.SELECTION:
                 if not self.composite_frames:
-                    self.status_message = "No frames marked! Use K or Interval to mark frames."
+                    self.status_message = "没有标记任何帧！请用 K 键或间隔选择来标记帧。"
                     self.status_timer = 90
                     return
                 self.state = GUIState.SAVE
                 self.status_message = self._composite_and_save()
                 self.status_timer = 120
-                # Immediately return to SELECTION
+                # 立即返回 SELECTION
                 self.state = GUIState.SELECTION
         elif name == "restart":
             if self.inference_state is not None:
@@ -735,7 +739,7 @@ class StroboscopicGUI:
             self._preview_cache = None
             self.viz_mode = "mask"
             self.state = GUIState.SETUP
-            self.status_message = "Restarted. Mark objects and press Start."
+            self.status_message = "已重新开始。请标记物体并按开始跟踪。"
             self.status_timer = 90
 
     # ===================================================================
@@ -1029,7 +1033,7 @@ class StroboscopicGUI:
                 self.current_frame_idx = min_seed
                 self._set_trackbar(TRACKBAR_FRAME, self.current_frame_idx)
                 total_masks = sum(len(m) for m in self.masks.values())
-                self.status_message = f"Tracking done. {total_masks} masks across {len(self.masks)} frames."
+                self.status_message = f"跟踪完成。{total_masks} 个 mask，覆盖 {len(self.masks)} 帧。"
                 self.status_timer = 120
                 self._preview_dirty = True
                 return False
@@ -1100,16 +1104,16 @@ class StroboscopicGUI:
         active_name = active.name if active else "—"
 
         if self.state == GUIState.SETUP:
-            info = (f"{state_label} | Frame {self.current_frame_idx}/{self.n_frames}"
-                    f" | Active: {active_name} | Objects: {n_objs}")
+            info = (f"{state_label} | 帧 {self.current_frame_idx}/{self.n_frames}"
+                    f" | 活跃: {active_name} | 物体数: {n_objs}")
         elif self.state == GUIState.TRACKING:
             n_masks = sum(len(m) for m in self.masks.values())
-            info = (f"{state_label} | Frame {self.current_frame_idx}/{self.n_frames}"
-                    f" | Objects: {n_objs} | Masks: {n_masks}")
+            info = (f"{state_label} | 帧 {self.current_frame_idx}/{self.n_frames}"
+                    f" | 物体: {n_objs} | Mask数: {n_masks}")
         else:
             marked = "K" if self.current_frame_idx in self.composite_frames else "-"
-            info = (f"{state_label} | Frame {self.current_frame_idx}/{self.n_frames}"
-                    f" | Marked: {len(self.composite_frames)} | BG: {self.background_frame_idx}"
+            info = (f"{state_label} | 帧 {self.current_frame_idx}/{self.n_frames}"
+                    f" | 已标记: {len(self.composite_frames)} | 背景: {self.background_frame_idx}"
                     f" | [{marked}]")
 
         cv2.putText(canvas, info, (10, 22), cv2.FONT_HERSHEY_SIMPLEX,
@@ -1188,7 +1192,7 @@ class StroboscopicGUI:
         out_img = self._render_composite()
         self.args.out.parent.mkdir(parents=True, exist_ok=True)
         cv2.imwrite(str(self.args.out), out_img)
-        return f"Saved: {self.args.out}  ({len(self.composite_frames)} frames)"
+        return f"已保存: {self.args.out}  ({len(self.composite_frames)} 帧合成)"
 
     def close(self) -> None:
         if self.inference_state is not None:
@@ -1240,7 +1244,7 @@ def _draw_timeline_on_canvas(gui: StroboscopicGUI, canvas: np.ndarray) -> np.nda
     cv2.line(out, (cur_x, y0), (cur_x, y0 + TIMELINE_H), (255, 255, 255), 2)
 
     # Legend
-    cv2.putText(out, "gray=no mask  dark=has mask  green=marked  colors=obj range  orange=bg  white=pos",
+    cv2.putText(out, "灰=无mask 深灰=有mask 绿=已标记 彩色=物体范围 橙=背景 白=当前位置",
                 (5, y0 + TIMELINE_H - 8), cv2.FONT_HERSHEY_SIMPLEX,
                 0.3, (160, 160, 160), 1, cv2.LINE_AA)
     return out
@@ -1300,10 +1304,10 @@ def main() -> None:
         raise RuntimeError(f"Video not found: {args.video}")
 
     device_name = resolve_device(args.device)
-    print(f"Loading video: {args.video}")
-    print(f"Device: {device_name}")
-    print("Note: SAM2 model runs 100% locally on your GPU.")
-    print("First run will download ~150MB model from HuggingFace to local cache.")
+    print(f"加载视频: {args.video}")
+    print(f"推理设备: {device_name}")
+    print("注意: SAM2 模型 100% 在本地 GPU 上运行。")
+    print("首次运行将从 HuggingFace 下载约 150MB 模型到本地缓存。")
 
     with tempfile.TemporaryDirectory(prefix="sam2_gui_") as tmp_dir:
         # Step 1: optional FPS downsampling
@@ -1323,11 +1327,11 @@ def main() -> None:
         try:
             fps = cap.get(cv2.CAP_PROP_FPS) or source_fps or 30.0
             n_frames = get_frame_count(cap)
-            n_frames_mb = n_frames * vid_w * vid_h * 4 / (1024 * 1024)  # float32 RAM estimate
-            print(f"Frames: {n_frames}, FPS: {fps:.2f}, Resolution: {vid_w}x{vid_h}")
-            print(f"Estimated RAM for frames: ~{n_frames_mb:.0f} MB")
+            n_frames_mb = n_frames * vid_w * vid_h * 4 / (1024 * 1024)  # float32 内存估算
+            print(f"帧数: {n_frames}, 帧率: {fps:.2f}, 分辨率: {vid_w}x{vid_h}")
+            print(f"预估帧内存占用: ~{n_frames_mb:.0f} MB")
             if was_downsampled:
-                print(f"Temporal downsampling: {source_fps:.2f} → {fps:.2f}")
+                print(f"帧率降采样: {source_fps:.2f} → {fps:.2f}")
 
             device = resolve_device(args.device)
             predictor = build_predictor(args, device=device)
@@ -1340,17 +1344,17 @@ def main() -> None:
                     msg = str(e)
                     if "not enough memory" in msg or "OutOfMemory" in msg or "CUDA error" in msg:
                         print("\n" + "=" * 60)
-                        print("MEMORY ERROR — try these options:")
-                        print("  1. Lower --max-dim (e.g., --max-dim 720 or --max-dim 640)")
-                        print("  2. Lower --process-fps (e.g., --process-fps 3)")
-                        print("  3. Use a smaller model: --hf-model-id facebook/sam2.1-hiera-tiny")
-                        print("  4. Use CPU only: --device cpu (much slower but less VRAM)")
+                        print("内存不足 — 请尝试以下方案：")
+                        print("  1. 降低 --max-dim（如 --max-dim 720 或 --max-dim 640）")
+                        print("  2. 降低 --process-fps（如 --process-fps 3）")
+                        print("  3. 使用更小的模型: --hf-model-id facebook/sam2.1-hiera-tiny")
+                        print("  4. 仅用 CPU: --device cpu（很慢但省显存）")
                         print("=" * 60)
                     raise
         finally:
             cap.release()
             cv2.destroyAllWindows()
-    print("Done.")
+    print("完成。")
 
 
 if __name__ == "__main__":
