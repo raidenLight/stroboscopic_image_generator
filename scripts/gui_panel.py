@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from gui_app import StroboscopicGUI
 
 PANEL_WIDTH = 400
-PANEL_HEIGHT = 650
+PANEL_HEIGHT = 720
 
 
 class ControlPanel:
@@ -22,6 +22,7 @@ class ControlPanel:
         self.root.title("控制面板 — 频闪图像生成器")
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.resizable(True, True)
+        self.root.minsize(360, 500)
         self.root.geometry(f"{PANEL_WIDTH}x{PANEL_HEIGHT}+50+50")
         self.root.attributes("-topmost", True)
         self.root.lift()
