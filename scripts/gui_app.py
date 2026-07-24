@@ -525,11 +525,6 @@ class StroboscopicGUI:
     def _handle_keyboard(self, key: int, key_raw: int) -> None:
         ctrl = (key_raw & 0xE00000) != 0  # 检测 Ctrl 修饰键
 
-        if key_raw == 27:  # Esc — 仅中止跟踪，不退出程序
-            if self.state == GUIState.TRACKING:
-                self.action("abort_tracking")
-            return
-
         # ── 导航 ──
         if key_raw in (81, 65361, 2424832):  # ←
             if ctrl:
@@ -590,8 +585,7 @@ class StroboscopicGUI:
                 self.action("range_select")
         # ── TRACKING 态专用键 ──
         elif self.state == GUIState.TRACKING:
-            if key_raw == 27:
-                self.action("abort_tracking")
+            pass  # Esc 不再绑定，中止跟踪仅通过面板按钮
 
     # ==================================================================
     # Trackbar callbacks
