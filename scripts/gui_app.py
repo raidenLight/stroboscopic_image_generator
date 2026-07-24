@@ -648,21 +648,16 @@ class StroboscopicGUI:
         return canvas
 
     def _draw_points_overlay(self, canvas: np.ndarray) -> None:
-        """在所有物体位置绘制跟踪点。"""
+        """仅绘制当前活跃物体的跟踪点。"""
         active = self.active_object()
-        for obj in self.objects:
-            is_active = (obj is active)
-            for i, (px, py) in enumerate(obj.points, start=1):
-                b, g, r = int(obj.color[0]), int(obj.color[1]), int(obj.color[2])
-                if is_active:
-                    cv2.circle(canvas, (px, py), 7, (b, g, r), -1)
-                    cv2.circle(canvas, (px, py), 20, (b, g, r), 2)
-                    cv2.putText(canvas, str(i), (px + 8, py - 8),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (b, g, r), 2, cv2.LINE_AA)
-                else:
-                    cv2.circle(canvas, (px, py), 7, (b, g, r), 2)
-                    cv2.putText(canvas, obj.name, (px + 12, py - 8),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (b, g, r), 1, cv2.LINE_AA)
+        if active is None:
+            return
+        b, g, r = int(active.color[0]), int(active.color[1]), int(active.color[2])
+        for i, (px, py) in enumerate(active.points, start=1):
+            cv2.circle(canvas, (px, py), 7, (b, g, r), -1)
+            cv2.circle(canvas, (px, py), 20, (b, g, r), 2)
+            cv2.putText(canvas, str(i), (px + 8, py - 8),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (b, g, r), 2, cv2.LINE_AA)
 
     def _draw_onboarding(self, canvas: np.ndarray) -> None:
         """首次启动引导覆盖层。"""
