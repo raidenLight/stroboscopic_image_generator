@@ -248,7 +248,9 @@ class ControlPanel:
         sb = ttk.Scrollbar(self.marked_inner, orient=tk.VERTICAL, command=cvs.yview)
         inner = ttk.Frame(cvs)
         inner.bind("<Configure>", lambda e: cvs.configure(scrollregion=cvs.bbox("all")))
-        cvs.create_window((0, 0), window=inner, anchor="nw")
+        win_id = cvs.create_window((0, 0), window=inner, anchor="nw")
+        # Inner frame 宽度跟随 Canvas 宽度，内容才能填满
+        cvs.bind("<Configure>", lambda e: cvs.itemconfig(win_id, width=e.width))
         cvs.configure(yscrollcommand=sb.set)
         cvs.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         sb.pack(side=tk.RIGHT, fill=tk.Y)
