@@ -342,7 +342,7 @@ class ControlPanel:
         tree.column("row", width=24, anchor=tk.CENTER, stretch=False, minwidth=24)
         # Col 1: 帧标签
         tree.heading("frame", text=f"帧 / 时间 ({len(frames)})")
-        tree.column("frame", width=120, anchor=tk.W, stretch=True, minwidth=80)
+        tree.column("frame", width=80, anchor=tk.W, stretch=True, minwidth=60)
         # Col 2..n+1: 物体列
         for obj in objs:
             col = f"obj_{obj.obj_id}"
