@@ -483,7 +483,7 @@ class StroboscopicGUI:
                 self._preview_mask = None
 
             # 键盘输入
-            key_raw = cv2.pollKey()
+            key_raw = cv2.waitKeyEx(1)  # 比pollKey更可靠，1ms不阻塞
             if key_raw >= 0:
                 key = key_raw & 0xFF
                 self._handle_keyboard(key, key_raw)
