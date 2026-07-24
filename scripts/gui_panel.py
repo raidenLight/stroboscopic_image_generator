@@ -36,6 +36,8 @@ class ControlPanel:
         self._last_active_idx: int = -1
         self._last_obj_count: int = -1
         self._last_marked_count: int = -1
+        self._last_overrides_count: int = -1
+        self._last_per_frame_count: int = -1
         self._interval_str = tk.StringVar(value="1.5")
         self._range_start_str = tk.StringVar(value="0")
         self._range_end_str = tk.StringVar(value=str(max(gui.n_frames - 1, 0)))
@@ -183,6 +185,9 @@ class ControlPanel:
 
     # ── Alpha ──
     def _build_alpha_section(self) -> None:
+        # ★ 重建时同步 StringVar 到 model（覆盖 restart 等操作的变化）
+        self._alpha_start_str.set(f"{self.gui.alpha_start:.2f}")
+        self._alpha_end_str.set(f"{self.gui.alpha_end:.2f}")
         r = ttk.Frame(self.alpha_inner)
         r.pack(fill=tk.X)
         ttk.Label(r, text="首帧:").pack(side=tk.LEFT)
@@ -268,8 +273,9 @@ class ControlPanel:
         cvs.bind("<Enter>", lambda e: cvs.focus_set())
 
         # ── 头行 ──
+        inner.columnconfigure(0, weight=1)  # 帧标签列扩展，吸收空白空间
         ttk.Label(inner, text=f"帧 / 时间 ({count})", font=("", 8, "bold"), anchor=tk.W).grid(
-            row=0, column=0, sticky="w")
+            row=0, column=0, sticky="ew")
         for j, obj in enumerate(objs):
             cb_var = tk.BooleanVar(value=True)
             cb = ttk.Checkbutton(inner, variable=cb_var)
@@ -350,16 +356,22 @@ class ControlPanel:
     # ==================================================================
     def sync_from_gui(self) -> None:
         gui = self.gui
+        overrides_c = sum(len(v) for v in gui.frame_overrides.values())
+        alpha_c = len(gui.per_frame_alpha)
         need_rebuild = (
             gui.state != self._last_state
             or gui.active_obj_idx != self._last_active_idx
             or len(gui.objects) != self._last_obj_count
             or len(gui.composite_frames) != self._last_marked_count
+            or overrides_c != self._last_overrides_count
+            or alpha_c != self._last_per_frame_count
         )
         if need_rebuild:
             self._rebuild_object_buttons()
             self._build_dynamic()
             self._last_marked_count = len(gui.composite_frames)
+            self._last_overrides_count = overrides_c
+            self._last_per_frame_count = alpha_c
 
         state_text = "跟踪中" if gui.state == GUIState.TRACKING else "编辑"
         self.lbl_state.configure(text=state_text)
@@ -392,11 +404,8 @@ class ControlPanel:
             except tk.TclError:
                 pass
 
-        if gui.state == GUIState.EDIT:
-            if self._alpha_start_str.get() != f"{gui.alpha_start:.2f}":
-                self._alpha_start_str.set(f"{gui.alpha_start:.2f}")
-            if self._alpha_end_str.get() != f"{gui.alpha_end:.2f}":
-                self._alpha_end_str.set(f"{gui.alpha_end:.2f}")
+        # ★ Alpha StringVar 只在程序修改时更新，不在每帧 sync 中覆盖用户输入
+        # Alpha 值变化由 _apply_alpha_gradient / restart 等 action 通过重建 UI 来反映
 
     def _rebuild_object_buttons(self) -> None:
         for w in self.obj_grid_frame.winfo_children(): w.destroy()
