@@ -319,6 +319,7 @@ class StroboscopicGUI:
                         self.composite_frames.add(f)
                     self._range_start = None
                     self._set_status(f"范围 {start}→{end}：已添加 {end - start + 1} 帧。", "info")
+                    self._data_version += 1
                     self._preview_dirty = True
 
         elif name == "apply_interval":
@@ -341,6 +342,7 @@ class StroboscopicGUI:
                     self.composite_frames.add(f)
                     count += 1
                 self._set_status(f"间隔 {interval_sec}秒 ({r_start}→{r_end})：已添加 {count} 帧。", "info")
+                self._data_version += 1
                 self._preview_dirty = True
 
         elif name == "set_bg":

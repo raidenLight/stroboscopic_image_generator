@@ -381,9 +381,15 @@ class ControlPanel:
                 # 双击跳转（下面处理）
                 pass
             elif 1 <= col_idx <= n_objs:
-                # 物体列：toggle
+                # 物体列：toggle + 即时更新单元格
                 obj = objs[col_idx - 1]
                 self.gui.action("toggle_frame_object_at", fidx, obj.obj_id)
+                has_mask = self.gui.masks.get(fidx, {}).get(obj.obj_id) is not None
+                override = self.gui.frame_overrides.get(fidx, {}).get(obj.obj_id)
+                checked = override if override is not None else True
+                vals = list(tree.item(item, "values"))
+                vals[col_idx] = "☑" if (has_mask and checked) else ("☐" if has_mask else "—")
+                tree.item(item, values=vals)
             elif col_idx == n_objs + 1:
                 # Alpha 列：弹出输入框
                 self._popup_alpha_editor(tree, item, fidx, col_idx)
