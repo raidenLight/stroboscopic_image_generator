@@ -286,8 +286,9 @@ class ControlPanel:
         ttk.Button(self.actions_inner, text="⏹ 中止 (Esc)",
                    command=lambda: self.gui.action("abort_tracking")).pack(fill=tk.X, pady=2)
 
-    # ── 合成帧列表（Treeview 表格，自带滚动+列头）──
+    # ── 合成帧列表（Treeview 表格）──
     def _build_marked_list(self) -> None:
+        import re
         frames = sorted(self.gui.composite_frames)
         objs = self.gui.objects
         n_objs = len(objs)
@@ -303,20 +304,29 @@ class ControlPanel:
             ttk.Label(self.marked_inner, text="（暂无标记帧，按 K 标记）", foreground="gray").pack()
             return
 
-        # ── 列定义 ──
-        columns = ["frame"] + [f"obj_{o.obj_id}" for o in objs] + ["alpha", "del"]
+        # ── 列定义: [行选] [帧标签] [obj1] [obj2]... [α] [✕] ──
+        columns = ["row"] + ["frame"] + [f"obj_{o.obj_id}" for o in objs] + ["alpha", "del"]
         tree = ttk.Treeview(self.marked_inner, columns=columns, show="headings",
                             selectmode="browse", height=8)
+
+        # Col 0: 行选框
+        tree.heading("row", text="")  # 无文字
+        tree.column("row", width=28, anchor=tk.CENTER, stretch=False)
+        # Col 1: 帧标签 (expand)
         tree.heading("frame", text=f"帧 / 时间 ({len(frames)})")
-        tree.column("frame", width=140, anchor=tk.W, stretch=True)
+        tree.column("frame", width=130, anchor=tk.W, stretch=True)
+        # Col 2..n+1: 物体列（列头可点击全选/全不选）
         for obj in objs:
             col = f"obj_{obj.obj_id}"
-            tree.heading(col, text=obj.name[:4])
-            tree.column(col, width=36, anchor=tk.CENTER, stretch=False)
+            tree.heading(col, text=f"☑ {obj.name[:3]}",
+                         command=lambda oid=obj.obj_id: self._col_toggle_all(tree, oid))
+            tree.column(col, width=38, anchor=tk.CENTER, stretch=False)
+        # Alpha
         tree.heading("alpha", text="α")
-        tree.column("alpha", width=52, anchor=tk.CENTER, stretch=False)
+        tree.column("alpha", width=50, anchor=tk.CENTER, stretch=False)
+        # 删除
         tree.heading("del", text="")
-        tree.column("del", width=28, anchor=tk.CENTER, stretch=False)
+        tree.column("del", width=26, anchor=tk.CENTER, stretch=False)
 
         # Scrollbar
         sb = ttk.Scrollbar(self.marked_inner, orient=tk.VERTICAL, command=tree.yview)
@@ -327,15 +337,15 @@ class ControlPanel:
         # ── 填充数据 ──
         fps = max(self.gui.fps, 1)
         for fidx in all_rows:
-            # 降采样后 fps 已是处理后的帧率，帧号×间隔 = 原始视频时间（秒）
             t_sec = fidx / fps
             ts = f"{int(t_sec // 60)}:{int(t_sec % 60):02d}"
             is_bg = (fidx == bg)
             is_excluded = fidx in self.gui._excluded_frames
             label = f"帧{fidx} {ts}s" + (" [BG]" if is_bg else "") + (" [排除]" if is_excluded else "")
 
-            # 每列值
-            values = [label]
+            # 行选 ☑/☐
+            row_val = "☐" if is_excluded else "☑"
+            values = [row_val, label]
             for obj in objs:
                 has_mask = self.gui.masks.get(fidx, {}).get(obj.obj_id) is not None
                 override = self.gui.frame_overrides.get(fidx, {}).get(obj.obj_id)
@@ -346,8 +356,6 @@ class ControlPanel:
             values.append("✕")
 
             item_id = tree.insert("", tk.END, values=values)
-
-            # 排除帧→灰色
             if is_excluded:
                 tree.item(item_id, tags=("excluded",))
             elif is_bg:
@@ -356,7 +364,7 @@ class ControlPanel:
         tree.tag_configure("excluded", foreground="#aaaaaa")
         tree.tag_configure("bg", foreground="#CC6600")
 
-        # ── 事件绑定 ──
+        # ── 点击处理 ──
         def _on_click(event):
             region = tree.identify_region(event.x, event.y)
             if region != "cell":
@@ -368,21 +376,24 @@ class ControlPanel:
             values = tree.item(item, "values")
             if not values:
                 return
-            # 从 label 解析 fidx
-            label = values[0]
-            import re
+            label = values[1]  # 帧标签在第1列（0=行选）
             m = re.match(r"帧(\d+)", label)
             if not m:
                 return
             fidx = int(m.group(1))
-            col_idx = int(col[1:]) - 1  # "#1" → 0
+            col_idx = int(col[1:]) - 1  # "#0" → 0
 
             if col_idx == 0:
-                # 双击跳转（下面处理）
-                pass
-            elif 1 <= col_idx <= n_objs:
-                # 物体列：toggle + 即时更新单元格
-                obj = objs[col_idx - 1]
+                # ★ 行选框：toggle _excluded_frames
+                if fidx in self.gui._excluded_frames:
+                    self.gui._excluded_frames.discard(fidx)
+                else:
+                    self.gui._excluded_frames.add(fidx)
+                self.gui._data_version += 1
+                self.gui._preview_dirty = True
+            elif 2 <= col_idx <= n_objs + 1:
+                # ★ 物体列：toggle 可见性
+                obj = objs[col_idx - 2]
                 self.gui.action("toggle_frame_object_at", fidx, obj.obj_id)
                 has_mask = self.gui.masks.get(fidx, {}).get(obj.obj_id) is not None
                 override = self.gui.frame_overrides.get(fidx, {}).get(obj.obj_id)
@@ -390,10 +401,10 @@ class ControlPanel:
                 vals = list(tree.item(item, "values"))
                 vals[col_idx] = "☑" if (has_mask and checked) else ("☐" if has_mask else "—")
                 tree.item(item, values=vals)
-            elif col_idx == n_objs + 1:
-                # Alpha 列：弹出输入框
-                self._popup_alpha_editor(tree, item, fidx, col_idx)
             elif col_idx == n_objs + 2:
+                # Alpha 列：弹出编辑
+                self._popup_alpha_editor(tree, item, fidx, col_idx)
+            elif col_idx == n_objs + 3:
                 # 删除
                 self.gui.composite_frames.discard(fidx)
                 self.gui._data_version += 1
@@ -406,18 +417,40 @@ class ControlPanel:
             item = tree.identify_row(event.y)
             if not item:
                 return
-            label = tree.item(item, "values")[0]
-            import re
+            label = tree.item(item, "values")[1]
             m = re.match(r"帧(\d+)", label)
             if m:
                 self._jump_to_frame(int(m.group(1)))
 
         tree.bind("<ButtonRelease-1>", _on_click)
         tree.bind("<Double-1>", _on_double)
-        # 鼠标滚轮
         def _tree_wheel(e):
             tree.yview_scroll(int(-1 * e.delta / 120), "units")
         tree.bind("<MouseWheel>", _tree_wheel)
+
+    def _col_toggle_all(self, tree, obj_id: int) -> None:
+        """列头点击：全选/全不选该物体的所有帧。"""
+        # 判断当前是否全部选中
+        all_checked = True
+        for fidx in self.gui.composite_frames:
+            has_mask = self.gui.masks.get(fidx, {}).get(obj_id) is not None
+            if not has_mask:
+                continue
+            override = self.gui.frame_overrides.get(fidx, {}).get(obj_id)
+            if override is not None and not override:
+                all_checked = False
+                break
+            if override is None:
+                continue  # 默认 True
+        # 全不选 or 部分选 → 全选；全选 → 全不选
+        new_val = not all_checked
+        for fidx in self.gui.composite_frames:
+            if self.gui.masks.get(fidx, {}).get(obj_id) is not None:
+                if fidx not in self.gui.frame_overrides:
+                    self.gui.frame_overrides[fidx] = {}
+                self.gui.frame_overrides[fidx][obj_id] = new_val
+        self.gui._data_version += 1
+        self.gui._preview_dirty = True
 
     def _jump_to_frame(self, fidx: int) -> None:
         """双击帧列表跳转到该帧。"""
