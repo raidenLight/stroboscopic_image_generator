@@ -25,7 +25,7 @@ class ControlPanel:
         self.root.geometry(f"{PANEL_WIDTH}x{PANEL_HEIGHT}+50+50")
         self.root.attributes("-topmost", True)
         self.root.lift()
-        self.root.after(3000, lambda: self.root.attributes("-topmost", False))
+        self.root.after(500, lambda: self.root.attributes("-topmost", False))
         self.root.bind("<Key>", self._on_tk_key)
 
         style = ttk.Style(self.root)
