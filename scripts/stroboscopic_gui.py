@@ -433,10 +433,10 @@ class ControlPanel:
             btn.pack(side=tk.LEFT, padx=2, pady=2, ipadx=8)
             self._obj_btns.append(btn)
 
-    def show_error(self, msg: str) -> None:
-        """Show an error dialog."""
+    def show_error(self, title: str, msg: str = "") -> None:
+        """弹出错误对话框。"""
         from tkinter import messagebox
-        messagebox.showerror("Error", msg)
+        messagebox.showerror(title, msg if msg else title)
 
     def _on_tk_key(self, event: tk.Event) -> None:
         """Forward keyboard events from tkinter window to the GUI."""
@@ -534,7 +534,7 @@ def parse_args() -> argparse.Namespace:
                         help="将预测器状态放在 CPU 内存（更慢但更省 GPU 显存）")
     parser.add_argument("--max-dim", type=int, default=1280,
                         help="帧最大尺寸（像素），长边超过此值会等比缩放。越小越省内存。"
-                             "默认 1280，内存不足时可尝试 720 或 960")
+                             "默认 1280，内存不足时可尝试 720 或 640")
 
     args = parser.parse_args()
     if not 0.0 <= args.alpha <= 1.0:
@@ -649,7 +649,26 @@ class StroboscopicGUI:
                 obj.points.clear()
         elif name == "start_tracking":
             if self.state == GUIState.SETUP and any(o.points for o in self.objects):
-                self._start_tracking()
+                try:
+                    self._start_tracking()
+                except (RuntimeError, MemoryError) as e:
+                    msg = str(e)
+                    self.status_message = "内存不足，请降低分辨率或帧率后重试！"
+                    self.status_timer = 180
+                    self._tracking_generator = None
+                    self.masks.clear()
+                    self.state = GUIState.SETUP
+                    if self.panel:
+                        mem_mb = self.n_frames * self.w * self.h * 4 / (1024 * 1024)
+                        detail = (
+                            f"内存不足，无法加载视频帧（需约 {mem_mb:.0f} MB）。\n\n"
+                            f"当前设置: --max-dim {self.args.max_dim}, "
+                            f"--process-fps {self.args.process_fps or '默认'}\n"
+                            f"分辨率: {self.w}x{self.h}, 帧数: {self.n_frames}\n\n"
+                            f"建议降低参数后重试:\n"
+                            f"  --max-dim 640 --process-fps 3"
+                        )
+                        self.panel.show_error("内存不足 (OOM)", detail)
         elif name == "abort_tracking":
             if self.state == GUIState.TRACKING:
                 self._tracking_generator = None
