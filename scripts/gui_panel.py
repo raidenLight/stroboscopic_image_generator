@@ -87,7 +87,6 @@ class ControlPanel:
         # ── 日志栏（固定高度，bottom-2）──
         log_frame = tk.Frame(self.root, bg="#f0f0e0", relief=tk.SUNKEN, bd=1)
         log_frame.pack(fill=tk.X, padx=3, pady=(1, 0), side=tk.BOTTOM)
-        log_frame.pack_propagate(False)  # ★ 关键：阻止子控件撑大父容器
         self._log_text = tk.Text(log_frame, height=10, font=("微软雅黑", 8), fg="#444444",
                                  bg="#f0f0e0", wrap=tk.WORD, state=tk.DISABLED, relief=tk.FLAT,
                                  bd=0, padx=3, pady=1)
