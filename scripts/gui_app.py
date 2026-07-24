@@ -92,6 +92,8 @@ class StroboscopicGUI:
         self._preview_dirty = True
         self._preview_cache: np.ndarray | None = None
         self.frame_overrides: dict[int, dict[int, bool]] = {}
+        self._excluded_frames: set[int] = set()    # 行勾选排除的帧（仍在列表中但灰色）
+        self._data_version: int = 0                 # 数据变更版本号，触发面板重建
 
         # ── Alpha：渐变 + 逐帧覆盖 ──
         self.alpha_start: float = args.alpha
@@ -199,20 +201,6 @@ class StroboscopicGUI:
             idx = args[0] if args else self.active_obj_idx
             if 0 <= idx < len(self.objects):
                 obj = self.objects[idx]
-                has_mask = any(
-                    obj.obj_id in self.masks.get(f, {}) for f in self.masks
-                )
-                if self.panel:
-                    msg = f"确定要删除 {obj.name}？"
-                    if has_mask:
-                        msg += f"\n（将同时删除其所有跟踪 mask）"
-                    self._in_modal = True
-                    try:
-                        confirmed = self.panel.confirm("删除物体", msg)
-                    finally:
-                        self._in_modal = False
-                    if not confirmed:
-                        return
                 self._remove_object(obj)
                 self._set_status(f"已删除 {obj.name}", "warn")
 
@@ -276,6 +264,8 @@ class StroboscopicGUI:
         elif name == "clear_all_marked":
             self.composite_frames.clear()
             self.frame_overrides.clear()
+            self._excluded_frames.clear()
+            self._data_version += 1
             self._preview_dirty = True
             self._set_status("已清除所有标记帧。", "info")
 
@@ -288,6 +278,7 @@ class StroboscopicGUI:
                     self.frame_overrides[fidx] = {}
                 cur = self.frame_overrides[fidx].get(oid)
                 self.frame_overrides[fidx][oid] = not (cur if cur is not None else True)
+                self._data_version += 1
                 self._preview_dirty = True
 
         elif name == "set_per_frame_alpha":
@@ -295,6 +286,7 @@ class StroboscopicGUI:
             val = args[1] if len(args) > 1 else None
             if val is not None and 0.0 <= val <= 1.0:
                 self.per_frame_alpha[fidx] = val
+                self._data_version += 1
                 self._preview_dirty = True
 
         elif name == "set_alpha_start":
@@ -366,12 +358,6 @@ class StroboscopicGUI:
                 self._set_status("没有标记任何帧！请用 K 键或间隔选择来标记帧。", "error")
                 return
             msg = self._composite_and_save()
-            if self.panel:
-                self._in_modal = True
-                try:
-                    self.panel.show_info("保存成功", msg)
-                finally:
-                    self._in_modal = False
             self._set_status(msg, "success")
 
         elif name == "restart":
@@ -386,6 +372,8 @@ class StroboscopicGUI:
             self._tracked_obj_ids.clear()
             self.composite_frames.clear()
             self.frame_overrides.clear()
+            self._excluded_frames.clear()
+            self._data_version += 1
             self.background_frame_idx = 0
             self._range_start = None
             self._preview_dirty = True
@@ -410,6 +398,9 @@ class StroboscopicGUI:
         # 终端显示完整中文消息
         prefix = {"error": "[ERROR]", "warn": "[WARN]", "success": "[OK]", "info": "[INFO]"}
         print(f"{prefix.get(level, '[INFO]')} {msg}")
+        # 同步到控制面板日志栏
+        if self.panel:
+            self.panel.log(msg)
         if level == "error":
             self.status_color = (0, 0, 255)
             self.status_timer = 180
@@ -846,10 +837,9 @@ class StroboscopicGUI:
                     offload_video_to_cpu=self.args.offload_video_to_cpu,
                     offload_state_to_cpu=self.args.offload_state_to_cpu,
                 )
-            else:
-                self.predictor.reset_state(self.inference_state)
 
-            # 注册当前物体的 prompt
+            # ★ 不 reset_state！直接注册当前物体的 prompt（SAM2 支持多物体共存）
+            # reset_state 会清除所有已注册物体，迫使已跟踪物体重新来过
             points_np = np.array(obj.points, dtype=np.float32)
             labels_np = np.ones(len(obj.points), dtype=np.int32)
             self.predictor.add_new_points_or_box(
@@ -955,6 +945,8 @@ class StroboscopicGUI:
         canvas = bg.astype(np.float32)
 
         for fidx in sorted(self.composite_frames):
+            if fidx in self._excluded_frames:
+                continue
             for obj in self._visible_objects_at(fidx):
                 mask = self.masks.get(fidx, {}).get(obj.obj_id)
                 if mask is None or not mask.any():

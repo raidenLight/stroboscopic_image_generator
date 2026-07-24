@@ -8,6 +8,9 @@ from typing import TYPE_CHECKING
 
 from gui_types import GUIState
 
+# 这些常量仅在 _jump_to_frame 中被引用
+from gui_types import TRACKBAR_FRAME
+
 if TYPE_CHECKING:
     from gui_app import StroboscopicGUI
 
@@ -24,10 +27,9 @@ class ControlPanel:
         self.root.resizable(True, True)
         self.root.minsize(360, 500)
         self.root.geometry(f"{PANEL_WIDTH}x{PANEL_HEIGHT}+50+50")
-        self.root.attributes("-topmost", True)
         self.root.lift()
-        self.root.after(500, lambda: self.root.attributes("-topmost", False))
-        self.root.bind("<Key>", self._on_tk_key)
+        # ★ bind_all 确保 Entry 等控件获焦时快捷键也生效
+        self.root.bind_all("<Key>", self._on_tk_key)
 
         style = ttk.Style(self.root)
         style.theme_use("clam")
@@ -36,8 +38,7 @@ class ControlPanel:
         self._last_active_idx: int = -1
         self._last_obj_count: int = -1
         self._last_marked_count: int = -1
-        self._last_overrides_count: int = -1
-        self._last_per_frame_count: int = -1
+        self._last_data_version: int = -1
         self._interval_str = tk.StringVar(value="1.5")
         self._range_start_str = tk.StringVar(value="0")
         self._range_end_str = tk.StringVar(value=str(max(gui.n_frames - 1, 0)))
@@ -47,6 +48,24 @@ class ControlPanel:
         self._build_static()
         self._build_dynamic()
         self.root.update()
+
+    # ==================================================================
+    # 日志
+    # ==================================================================
+    def log(self, msg: str) -> None:
+        """向底部日志窗追加一条日志。"""
+        if hasattr(self, "_log_text"):
+            try:
+                self._log_text.configure(state=tk.NORMAL)
+                self._log_text.insert(tk.END, msg + "\n")
+                self._log_text.see(tk.END)
+                # 限制行数，保留最近 50 行
+                line_count = int(self._log_text.index('end-1c').split('.')[0])
+                if line_count > 50:
+                    self._log_text.delete('1.0', f'{line_count - 50}.0')
+                self._log_text.configure(state=tk.DISABLED)
+            except tk.TclError:
+                pass
 
     # ==================================================================
     # 静态控件（只创建一次）
@@ -69,9 +88,6 @@ class ControlPanel:
         self.frm_objects.pack(fill=tk.X, padx=3, pady=1)
         self.obj_grid_frame = ttk.Frame(self.frm_objects)
         self.obj_grid_frame.pack(fill=tk.X)
-        self.btn_new_obj = ttk.Button(self.frm_objects, text="+ 新建物体 (N)",
-                                       command=lambda: self.gui.action("new_object"))
-        self.btn_new_obj.pack(fill=tk.X, pady=1)
 
         # ── 操作 ──
         self.frm_actions = ttk.LabelFrame(self.root, text="操作", padding=3)
@@ -103,10 +119,21 @@ class ControlPanel:
         self.marked_inner = ttk.Frame(self.frm_marked)
         self.marked_inner.pack(fill=tk.BOTH, expand=True)
 
+        # ── 日志栏（可滚动文本框，底部第二行）──
+        log_frame = tk.Frame(self.root, bg="#f0f0e0", relief=tk.SUNKEN, bd=1)
+        log_frame.pack(fill=tk.X, padx=3, pady=(1, 0), side=tk.BOTTOM)
+        self._log_text = tk.Text(log_frame, height=3, font=("微软雅黑", 8), fg="#444444",
+                                 bg="#f0f0e0", wrap=tk.WORD, state=tk.DISABLED, relief=tk.FLAT,
+                                 bd=0, padx=3, pady=1)
+        log_sb = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=self._log_text.yview)
+        self._log_text.configure(yscrollcommand=log_sb.set)
+        self._log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        log_sb.pack(side=tk.RIGHT, fill=tk.Y)
+
         # ── 底部（固定）──
         bottom = ttk.Frame(self.root)
-        bottom.pack(fill=tk.X, padx=3, pady=2)
-        ttk.Label(bottom, text="K标记 | I间隔 | R范围 | B背景 | V视图 | ←→导航 | S保存",
+        bottom.pack(fill=tk.X, padx=3, pady=1, side=tk.BOTTOM)
+        ttk.Label(bottom, text="N新建 P预览 K标记 I间隔 R范围 B背景 V视图 S保存 ←→导航 Ctrl+←→跳帧",
                    font=("", 7)).pack(side=tk.LEFT, anchor=tk.S)
         self.btn_restart = ttk.Button(bottom, text="↺ 重置全部",
                                        command=lambda: self.gui.action("restart"))
@@ -137,22 +164,26 @@ class ControlPanel:
             self._build_alpha_section()
             self._build_marked_list()
 
-    # ── EDIT 操作 ──
+    # ── EDIT 操作（新建 + 预览 + 跟踪 同行）──
     def _build_edit_actions(self) -> None:
         r = ttk.Frame(self.actions_inner)
         r.pack(fill=tk.X)
-        ttk.Button(r, text="👁 预览 (P)", command=lambda: self.gui.action("preview_frame")).pack(side=tk.LEFT, padx=1)
-        ttk.Button(r, text="✕ 清点 (Backspace)", command=lambda: self.gui.action("clear_points")).pack(side=tk.LEFT, padx=1)
+        ttk.Button(r, text="+ 新建 (N)", command=lambda: self.gui.action("new_object")).pack(
+            side=tk.LEFT, padx=1, fill=tk.X, expand=True)
+        ttk.Button(r, text="👁 预览 (P)", command=lambda: self.gui.action("preview_frame")).pack(
+            side=tk.LEFT, padx=1, fill=tk.X, expand=True)
 
         dirty = [o for o in self.gui.objects if o._dirty and o.points]
         if dirty:
-            btn = tk.Button(self.actions_inner, text=f"▶ 开始跟踪 ({len(dirty)} 物体)", bg="#4CAF50",
-                            fg="white", font=("", 10, "bold"), relief=tk.RAISED,
+            btn = tk.Button(r, text=f"▶ 跟踪 ({len(dirty)})", bg="#4CAF50",
+                            fg="white", font=("", 9, "bold"), relief=tk.RAISED,
                             command=lambda: self.gui.action("start_tracking"))
         else:
-            btn = tk.Button(self.actions_inner, text="▶ 开始跟踪", bg="#cccccc", fg="#888888",
-                            font=("", 10), relief=tk.FLAT, state=tk.DISABLED)
-        btn.pack(fill=tk.X, pady=2, ipady=2)
+            btn = tk.Button(r, text="▶ 跟踪", bg="#cccccc", fg="#888888",
+                            font=("", 9), relief=tk.FLAT, state=tk.DISABLED)
+        btn.pack(side=tk.LEFT, padx=1, fill=tk.X, expand=True, ipady=2)
+        ttk.Button(r, text="💾 保存 (S)", command=lambda: self.gui.action("save")).pack(
+            side=tk.LEFT, padx=1, fill=tk.X, expand=True)
 
     # ── 视图 ──
     def _build_view_section(self) -> None:
@@ -169,8 +200,9 @@ class ControlPanel:
         self._mark_btn = ttk.Button(row1, text="K 标记", command=lambda: self.gui.action("mark_frame"))
         self._mark_btn.pack(side=tk.LEFT, padx=1, fill=tk.X, expand=True)
         ttk.Button(row1, text="B 背景", command=lambda: self.gui.action("set_bg")).pack(side=tk.LEFT, padx=1, fill=tk.X, expand=True)
-        ttk.Button(row1, text="R 范围", command=lambda: self.gui.action("range_select")).pack(side=tk.LEFT, padx=1, fill=tk.X, expand=True)
-        ttk.Button(row1, text="清除全部标记", command=lambda: self.gui.action("clear_all_marked")).pack(side=tk.LEFT, padx=1, fill=tk.X, expand=True)
+        self._range_btn = ttk.Button(row1, text="R 范围", command=lambda: self.gui.action("range_select"))
+        self._range_btn.pack(side=tk.LEFT, padx=1, fill=tk.X, expand=True)
+        ttk.Button(row1, text="清除标记", command=lambda: self.gui.action("clear_all_marked")).pack(side=tk.LEFT, padx=1, fill=tk.X, expand=True)
 
         # 间隔选择：起始帧 + 中止帧 + 间隔(秒) + 应用
         row2 = ttk.Frame(self.select_inner)
@@ -185,31 +217,24 @@ class ControlPanel:
 
     # ── Alpha ──
     def _build_alpha_section(self) -> None:
-        # ★ 重建时同步 StringVar 到 model（覆盖 restart 等操作的变化）
+        # ★ 重建时同步 StringVar 到 model
         self._alpha_start_str.set(f"{self.gui.alpha_start:.2f}")
         self._alpha_end_str.set(f"{self.gui.alpha_end:.2f}")
         r = ttk.Frame(self.alpha_inner)
         r.pack(fill=tk.X)
-        ttk.Label(r, text="首帧:").pack(side=tk.LEFT)
+        ttk.Label(r, text="首帧 α:").pack(side=tk.LEFT)
         e1 = ttk.Entry(r, textvariable=self._alpha_start_str, width=5)
         e1.pack(side=tk.LEFT, padx=2)
-        e1.bind("<Return>", lambda e: self._apply_alpha("set_alpha_start", self._alpha_start_str))
-        ttk.Label(r, text="末帧:").pack(side=tk.LEFT, padx=(4, 0))
+        e1.bind("<Return>", lambda e: self._apply_alpha_gradient())
+        ttk.Label(r, text="末帧 α:").pack(side=tk.LEFT, padx=(4, 0))
         e2 = ttk.Entry(r, textvariable=self._alpha_end_str, width=5)
         e2.pack(side=tk.LEFT, padx=2)
-        e2.bind("<Return>", lambda e: self._apply_alpha("set_alpha_end", self._alpha_end_str))
-        ttk.Button(r, text="应用", command=self._apply_alpha_gradient).pack(side=tk.LEFT, padx=4)
-        ttk.Button(r, text="重置逐帧", command=lambda: self.gui.action("reset_per_frame_alphas")).pack(side=tk.RIGHT)
-
-    def _apply_alpha(self, action_name, var):
-        try:
-            val = float(var.get())
-            if 0.0 <= val <= 1.0:
-                self.gui.action(action_name, val)
-        except ValueError:
-            pass
+        e2.bind("<Return>", lambda e: self._apply_alpha_gradient())
+        ttk.Button(r, text="✓ 应用渐变", command=self._apply_alpha_gradient).pack(side=tk.LEFT, padx=4)
+        ttk.Button(r, text="↩ 清除逐帧α", command=lambda: self.gui.action("reset_per_frame_alphas")).pack(side=tk.RIGHT)
 
     def _apply_alpha_gradient(self):
+        """应用首/末帧 alpha 渐变设置。"""
         try:
             a0 = float(self._alpha_start_str.get())
             a1 = float(self._alpha_end_str.get())
@@ -217,6 +242,7 @@ class ControlPanel:
                 self.gui.alpha_start = a0
                 self.gui.alpha_end = a1
                 self.gui._preview_dirty = True
+                self.log(f"Alpha 渐变: {a0:.2f} → {a1:.2f}")
         except ValueError:
             pass
 
@@ -249,22 +275,20 @@ class ControlPanel:
             ttk.Label(self.marked_inner, text="（暂无标记帧，按 K 标记）", foreground="gray").pack()
             return
 
-        # Canvas + scrollbar（填满 frm_marked 空间）
+        # Canvas + scrollbar
         cvs = tk.Canvas(self.marked_inner, highlightthickness=0)
         sb = ttk.Scrollbar(self.marked_inner, orient=tk.VERTICAL, command=cvs.yview)
         inner = ttk.Frame(cvs)
         inner.bind("<Configure>", lambda e: cvs.configure(scrollregion=cvs.bbox("all")))
         win_id = cvs.create_window((0, 0), window=inner, anchor="nw")
-        # Inner frame 宽度跟随 Canvas 宽度，内容才能填满
         cvs.bind("<Configure>", lambda e: cvs.itemconfig(win_id, width=e.width))
         cvs.configure(yscrollcommand=sb.set)
         cvs.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         sb.pack(side=tk.RIGHT, fill=tk.Y)
 
-        # 绑定滚轮（带边界钳制）
+        # 滚轮 + 边界钳制
         def _wheel(e):
             cvs.yview_scroll(int(-1 * e.delta / 120), "units")
-            # 防止滚动超出内容范围
             y0, y1 = cvs.yview()
             if y0 <= 0.0:
                 cvs.yview_moveto(0.0)
@@ -273,18 +297,12 @@ class ControlPanel:
         cvs.bind("<Enter>", lambda e: cvs.focus_set())
 
         # ── 列布局: [行选] [帧标签(expand)] [obj1] [obj2]... [α] [✕] ──
-        # Col 0: 行选择框
-        # Col 1: 帧标签 (weight=1)
-        # Col 2..n_objs+1: 物体选择框
-        # Col n_objs+2: alpha
-        # Col n_objs+3: 删除
-        inner.columnconfigure(1, weight=1)  # 帧标签列扩展，吸收空白空间
+        inner.columnconfigure(1, weight=1)  # 帧标签列扩展
 
         # ── 头行 ──
         hdr_row_cb_var = tk.BooleanVar(value=True)
-        hdr_row_cb = ttk.Checkbutton(inner, variable=hdr_row_cb_var,
-                                      command=lambda: self._toggle_all_rows(hdr_row_cb_var.get()))
-        hdr_row_cb.grid(row=0, column=0)
+        ttk.Checkbutton(inner, variable=hdr_row_cb_var,
+                        command=lambda: self._toggle_all_rows(hdr_row_cb_var.get())).grid(row=0, column=0)
         ttk.Label(inner, text=f"帧 / 时间 ({count})", font=("", 8, "bold"), anchor=tk.W).grid(
             row=0, column=1, sticky="ew")
         for j, obj in enumerate(objs):
@@ -303,23 +321,26 @@ class ControlPanel:
             t_sec = fidx / max(self.gui.fps, 1)
             ts = f"{int(t_sec // 60)}:{int(t_sec % 60):02d}"
             is_bg = (fidx == self.gui.background_frame_idx)
-            label_text = f" 帧{fidx} {ts}s" + (" [BG]" if is_bg else "")
+            is_excluded = fidx in self.gui._excluded_frames
+            label_text = f" 帧{fidx} {ts}s" + (" [BG]" if is_bg else "") + (" [排除]" if is_excluded else "")
+            row_cb_var = tk.BooleanVar(value=not is_excluded)
+            ttk.Checkbutton(inner, variable=row_cb_var,
+                            command=lambda f=fidx, v=row_cb_var: (
+                                self.gui._excluded_frames.discard(f) if v.get()
+                                else self.gui._excluded_frames.add(f),
+                                setattr(self.gui, '_preview_dirty', True),
+                                setattr(self.gui, '_data_version', self.gui._data_version + 1)
+                            )).grid(row=row, column=0)
 
-            # ★ 行选择框（最左边）— 勾选=加入合成帧，取消=移除
-            row_cb_var = tk.BooleanVar(value=True)
-            row_cb = ttk.Checkbutton(inner, variable=row_cb_var,
-                                      command=lambda f=fidx, v=row_cb_var: (
-                                          self.gui.composite_frames.add(f) if v.get()
-                                          else self.gui.composite_frames.discard(f),
-                                          setattr(self.gui, '_preview_dirty', True)
-                                      ))
-            row_cb.grid(row=row, column=0)
-
-            lbl = ttk.Label(inner, text=label_text,
-                           foreground="#CC6600" if is_bg else "black",
+            if is_excluded:
+                fg = "#aaaaaa"
+            elif is_bg:
+                fg = "#CC6600"
+            else:
+                fg = "black"
+            lbl = ttk.Label(inner, text=label_text, foreground=fg,
                            font=("", 8, "bold" if is_bg else "normal"))
             lbl.grid(row=row, column=1, sticky="w")
-            # 双击跳转到该帧
             lbl.bind("<Double-1>", lambda e, f=fidx: self._jump_to_frame(f))
 
             for j, obj in enumerate(objs):
@@ -353,17 +374,22 @@ class ControlPanel:
     def _jump_to_frame(self, fidx: int) -> None:
         """双击帧列表跳转到该帧。"""
         self.gui.current_frame_idx = fidx
+        self.gui._set_trackbar(TRACKBAR_FRAME, fidx)
         self.gui._preview_dirty = True
         self.gui._preview_mask = None
 
     def _toggle_all_rows(self, show: bool) -> None:
-        """行选全选/全不选：切换所有合成帧的标记状态。"""
-        if show:
-            # 全选：恢复所有已有标记帧（无法恢复已删除的帧，因为 composite_frames 是 set）
-            pass  # 已显示的行默认都是 checked，无需操作
-        else:
+        if not show:
+            # 保存一份以便后续"全选"恢复（最佳努力）
+            self._saved_composite = set(self.gui.composite_frames)
+            self._saved_overrides = {f: dict(o) for f, o in self.gui.frame_overrides.items()}
             self.gui.composite_frames.clear()
             self.gui.frame_overrides.clear()
+        elif hasattr(self, "_saved_composite") and self._saved_composite:
+            self.gui.composite_frames = self._saved_composite
+            self.gui.frame_overrides = self._saved_overrides
+            self._saved_composite = set()
+            self._saved_overrides = {}
         self.gui._preview_dirty = True
 
     def _toggle_all_frames(self, obj_id: int, show: bool) -> None:
@@ -373,12 +399,14 @@ class ControlPanel:
                     self.gui.frame_overrides[fidx] = {}
                 self.gui.frame_overrides[fidx][obj_id] = show
         self.gui._preview_dirty = True
+        self.gui._data_version += 1
 
     def _apply_frame_alpha(self, fidx, entry):
         try:
             val = float(entry.get())
             if 0.0 <= val <= 1.0:
                 self.gui.action("set_per_frame_alpha", fidx, val)
+                self.log(f"帧{fidx} alpha={val:.2f}")
         except ValueError:
             pass
 
@@ -387,22 +415,18 @@ class ControlPanel:
     # ==================================================================
     def sync_from_gui(self) -> None:
         gui = self.gui
-        overrides_c = sum(len(v) for v in gui.frame_overrides.values())
-        alpha_c = len(gui.per_frame_alpha)
         need_rebuild = (
             gui.state != self._last_state
             or gui.active_obj_idx != self._last_active_idx
             or len(gui.objects) != self._last_obj_count
             or len(gui.composite_frames) != self._last_marked_count
-            or overrides_c != self._last_overrides_count
-            or alpha_c != self._last_per_frame_count
+            or gui._data_version != self._last_data_version
         )
         if need_rebuild:
             self._rebuild_object_buttons()
             self._build_dynamic()
             self._last_marked_count = len(gui.composite_frames)
-            self._last_overrides_count = overrides_c
-            self._last_per_frame_count = alpha_c
+            self._last_data_version = gui._data_version
 
         state_text = "跟踪中" if gui.state == GUIState.TRACKING else "编辑"
         self.lbl_state.configure(text=state_text)
@@ -427,7 +451,6 @@ class ControlPanel:
         if hasattr(self, "view_var") and self.view_var.get() != gui.viz_mode:
             self.view_var.set(gui.viz_mode)
 
-        # ★ 保护：_build_dynamic() 可能刚刚销毁了 _mark_btn，try/except 防止 TclError
         if hasattr(self, "_mark_btn"):
             marked = gui.current_frame_idx in gui.composite_frames
             try:
@@ -435,8 +458,15 @@ class ControlPanel:
             except tk.TclError:
                 pass
 
-        # ★ Alpha StringVar 只在程序修改时更新，不在每帧 sync 中覆盖用户输入
-        # Alpha 值变化由 _apply_alpha_gradient / restart 等 action 通过重建 UI 来反映
+        # R 按钮：显示范围起点状态
+        if hasattr(self, "_range_btn"):
+            try:
+                if gui._range_start is not None:
+                    self._range_btn.configure(text=f"R 终点(从{gui._range_start})")
+                elif self._range_btn.cget("text") != "R 范围":
+                    self._range_btn.configure(text="R 范围")
+            except tk.TclError:
+                pass
 
     def _rebuild_object_buttons(self) -> None:
         for w in self.obj_grid_frame.winfo_children(): w.destroy()
@@ -485,23 +515,31 @@ class ControlPanel:
         return messagebox.askyesno(title, msg)
 
     # ==================================================================
-    # 键盘转发
+    # 键盘转发（bind_all → 所有控件共享）
     # ==================================================================
     def _on_tk_key(self, event: tk.Event) -> None:
         gui = self.gui
         key = event.keysym; char = event.char; ctrl = event.state & 0x4
 
+        # 在 Entry 中打字时不拦截（除了全局快捷键）
+        if isinstance(event.widget, ttk.Entry):
+            if key not in ("Escape",):
+                return  # 让 Entry 正常处理输入（包括 Enter、Backspace 等）
+
         if key == "Escape":
-            gui.action("quit")
-        elif key == "Return" or key == "space":
-            if gui.state == GUIState.EDIT:
+            gui.action("quit" if gui.state != GUIState.TRACKING else "abort_tracking")
+        elif key == "Return":
+            # Enter 只在非 Entry 控件时触发跟踪
+            if gui.state == GUIState.EDIT and not isinstance(event.widget, ttk.Entry):
                 gui.action("start_tracking")
         elif key == "BackSpace":
-            obj = gui.active_object()
-            if obj and obj.points:
-                obj.points.pop(); obj._dirty = True; gui._preview_dirty = True
+            if not isinstance(event.widget, ttk.Entry):
+                obj = gui.active_object()
+                if obj and obj.points:
+                    obj.points.pop(); obj._dirty = True; gui._preview_dirty = True
         elif key == "Delete":
-            gui.action("delete_object", gui.active_obj_idx)
+            if not isinstance(event.widget, ttk.Entry):
+                gui.action("delete_object", gui.active_obj_idx)
         elif key in ("Left", "Right"):
             if ctrl:
                 gui.action("prev_marked" if key == "Left" else "next_marked")
