@@ -944,18 +944,19 @@ class StroboscopicGUI:
         active = self.active_object()
         active_name = active.name if active else "—"
 
+        t_sec = self.current_frame_idx / max(self.fps, 1)
+        ts = f"{int(t_sec // 60)}:{int(t_sec % 60):02d}"
         if self.state == GUIState.TRACKING:
             n_masks = sum(len(m) for m in self.masks.values())
-            info = (f"TRACKING | Frame {self.current_frame_idx}/{self.n_frames}"
+            info = (f"TRACKING | Frame {self.current_frame_idx}/{self.n_frames} {ts}s"
                     f" | Objs: {n_objs} | Masks: {n_masks}")
         else:
             marked = "K" if self.current_frame_idx in self.composite_frames else "-"
-            fps_str = f"fps={self.fps:.0f}" if self.args.process_fps else ""
             alpha_str = f"alpha={self.get_frame_alpha(self.current_frame_idx):.2f}"
-            info = (f"EDIT | Frame {self.current_frame_idx}/{self.n_frames}"
+            info = (f"EDIT | Frame {self.current_frame_idx}/{self.n_frames} {ts}s"
                     f" | Active: {active_name} | Marked: {len(self.composite_frames)}"
                     f" | BG: {self.background_frame_idx} | [{marked}]"
-                    f" | {alpha_str} {fps_str}")
+                    f" | {alpha_str}")
 
         cv2.putText(canvas, info, (10, 22), cv2.FONT_HERSHEY_SIMPLEX,
                     0.5, (220, 220, 220), 1, cv2.LINE_AA)
