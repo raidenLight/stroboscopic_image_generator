@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from gui_app import StroboscopicGUI
 
 PANEL_WIDTH = 460
-PANEL_HEIGHT = 780
+PANEL_HEIGHT = 800
 
 
 class ControlPanel:
@@ -117,18 +117,16 @@ class ControlPanel:
         # ── 快捷键 + 操作按钮（最底部）──
         bottom = ttk.Frame(self.root)
         bottom.pack(fill=tk.X, padx=3, pady=1, side=tk.BOTTOM)
-        ttk.Label(bottom, text="P预览 K标记 I间隔 R范围 B背景 V视图 S保存",
-                   font=("", 8)).pack(anchor=tk.W)
-        ttk.Label(bottom, text="Enter跟踪 ←→导航 Tab切物体 Backspace删点 Esc退出",
-                   font=("", 8)).pack(anchor=tk.W)
-        self.btn_restart = ttk.Button(bottom, text="↺ 重置全部",
+        ttk.Label(bottom, text="P预览 K标记 I间隔 R范围 B背景 V视图 S保存  Enter跟踪 ←→导航 Tab Backspace Esc",
+                   font=("", 8)).pack(side=tk.LEFT, anchor=tk.CENTER)
+        self.btn_restart = ttk.Button(bottom, text="↺ 重置",
                                        command=lambda: self.gui.action("restart"))
         self.btn_restart.pack(side=tk.RIGHT, padx=2)
 
         # ── 日志栏（倒数第二行）──
         log_frame = tk.Frame(self.root, bg="#f0f0e0", relief=tk.SUNKEN, bd=1)
         log_frame.pack(fill=tk.X, padx=3, pady=(1, 0), side=tk.BOTTOM)
-        self._log_text = tk.Text(log_frame, height=5, font=("微软雅黑", 8), fg="#444444",
+        self._log_text = tk.Text(log_frame, height=6, font=("微软雅黑", 8), fg="#444444",
                                  bg="#f0f0e0", wrap=tk.WORD, state=tk.DISABLED, relief=tk.FLAT,
                                  bd=0, padx=3, pady=1)
         log_sb = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=self._log_text.yview)
