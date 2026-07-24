@@ -657,6 +657,11 @@ class StroboscopicGUI:
                     self.status_timer = 180
                     self._tracking_generator = None
                     self.masks.clear()
+                    # 清理可能残留的 SAM2 显存
+                    if self.inference_state is not None:
+                        with contextlib.suppress(Exception):
+                            self.predictor.reset_state(self.inference_state)
+                        self.inference_state = None
                     self.state = GUIState.SETUP
                     if self.panel:
                         mem_mb = self.n_frames * self.w * self.h * 4 / (1024 * 1024)
@@ -673,8 +678,13 @@ class StroboscopicGUI:
             if self.state == GUIState.TRACKING:
                 self._tracking_generator = None
                 self.masks.clear()
+                # 释放 SAM2 显存
+                if self.inference_state is not None:
+                    with contextlib.suppress(Exception):
+                        self.predictor.reset_state(self.inference_state)
+                    self.inference_state = None
                 self.state = GUIState.SETUP
-                self.status_message = "跟踪已中止。"
+                self.status_message = "跟踪已中止，显存已释放。"
                 self.status_timer = 60
         elif name == "mark_frame":
             if self.state == GUIState.SELECTION:
