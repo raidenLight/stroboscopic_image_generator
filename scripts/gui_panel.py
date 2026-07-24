@@ -128,7 +128,7 @@ class ControlPanel:
         # ── 底部（固定）──
         bottom = ttk.Frame(self.root)
         bottom.pack(fill=tk.X, padx=3, pady=1, side=tk.BOTTOM)
-        ttk.Label(bottom, text="N新建 P预览 K标记 I间隔 R范围 B背景 V视图 S保存 ←→导航 Ctrl+←→跳帧",
+        ttk.Label(bottom, text="P预览 Enter跟踪 K标记 I间隔 R范围 B背景 V视图 S保存 ←→导航 Tab切物体 Backspace删点 Esc退出",
                    font=("", 7)).pack(side=tk.LEFT, anchor=tk.S)
         self.btn_restart = ttk.Button(bottom, text="↺ 重置全部",
                                        command=lambda: self.gui.action("restart"))

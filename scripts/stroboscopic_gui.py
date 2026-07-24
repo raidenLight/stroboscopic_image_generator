@@ -147,10 +147,10 @@ def main() -> None:
     print("首次运行将从 HuggingFace 下载约 150MB 模型到本地缓存。")
     print()
     print("交互指引:")
-    print("  1. 在视频上左键点击 → 添加跟踪点")
-    print("  2. N → 新建物体 | 1-9 → 切换物体")
-    print("  3. P → 单帧预览 | Enter → 开始跟踪")
-    print("  4. K → 标记帧 | V → 切换视图 | S → 保存")
+    print("  1. 点击视频 → 自动创建物体并添加跟踪点")
+    print("  2. P 保存并预览 | Enter 开始跟踪 | 再次点击自动创建下一个物体")
+    print("  3. K 标记帧 | I 间隔选取 | R 范围选取 | B 设背景")
+    print("  4. V 切换视图 | S 保存 | ← → 导航 | Tab 切换物体")
     print()
 
     with tempfile.TemporaryDirectory(prefix="sam2_gui_") as tmp_dir:
