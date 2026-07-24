@@ -93,6 +93,14 @@ class StroboscopicGUI:
         self._preview_cache: np.ndarray | None = None
         self.frame_overrides: dict[int, dict[int, bool]] = {}
 
+        # ── Alpha：渐变 + 逐帧覆盖 ──
+        self.alpha_start: float = args.alpha
+        self.alpha_end: float = args.alpha
+        self.per_frame_alpha: dict[int, float] = {}
+
+        # ── 跟踪后隐藏选点 ──
+        self._show_points_overlay: bool = True
+
         # ── 帧缓存 ──
         self._frame_cache: dict[int, np.ndarray] = {}
 
@@ -269,20 +277,40 @@ class StroboscopicGUI:
             self._preview_dirty = True
             self._set_status("已清除所有标记帧。", "info")
 
-        elif name == "toggle_frame_object":
-            if self.panel:
-                self._in_modal = True
-                try:
-                    result = self.panel.toggle_frame_objects_dialog()
-                finally:
-                    self._in_modal = False
-                if result is not None:
-                    fidx = self.current_frame_idx
-                    if fidx not in self.frame_overrides:
-                        self.frame_overrides[fidx] = {}
-                    for obj in self.objects:
-                        self.frame_overrides[fidx][obj.obj_id] = obj.obj_id in result
-                    self._preview_dirty = True
+        elif name == "toggle_frame_object_at":
+            # 在帧列表中切换指定帧的指定物体
+            fidx = args[0] if args else self.current_frame_idx
+            oid = args[1] if len(args) > 1 else None
+            if oid is not None:
+                if fidx not in self.frame_overrides:
+                    self.frame_overrides[fidx] = {}
+                cur = self.frame_overrides[fidx].get(oid)
+                self.frame_overrides[fidx][oid] = not (cur if cur is not None else True)
+                self._preview_dirty = True
+
+        elif name == "set_per_frame_alpha":
+            fidx = args[0] if args else self.current_frame_idx
+            val = args[1] if len(args) > 1 else None
+            if val is not None and 0.0 <= val <= 1.0:
+                self.per_frame_alpha[fidx] = val
+                self._preview_dirty = True
+
+        elif name == "set_alpha_start":
+            val = args[0] if args else None
+            if val is not None and 0.0 <= val <= 1.0:
+                self.alpha_start = val
+                self._preview_dirty = True
+
+        elif name == "set_alpha_end":
+            val = args[0] if args else None
+            if val is not None and 0.0 <= val <= 1.0:
+                self.alpha_end = val
+                self._preview_dirty = True
+
+        elif name == "reset_per_frame_alphas":
+            self.per_frame_alpha.clear()
+            self._preview_dirty = True
+            self._set_status("逐帧 alpha 已重置。", "info")
 
         elif name == "range_select":
             if self.state == GUIState.EDIT:
@@ -377,6 +405,10 @@ class StroboscopicGUI:
             self._frame_cache.clear()
             self.viz_mode = "mask"
             self._show_onboarding = True
+            self._show_points_overlay = True
+            self.per_frame_alpha.clear()
+            self.alpha_start = self.args.alpha
+            self.alpha_end = self.args.alpha
             self.state = GUIState.EDIT
             self._set_status("已重新开始。", "info")
 
@@ -409,11 +441,8 @@ class StroboscopicGUI:
         cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
         cv2.createTrackbar(TRACKBAR_FRAME, WINDOW_NAME, 0, max(0, self.n_frames - 1),
                            self._on_trackbar_frame)
-        cv2.createTrackbar(TRACKBAR_ALPHA, WINDOW_NAME, int(self.args.alpha * 100), 100,
-                           self._on_trackbar_alpha)
         cv2.setMouseCallback(WINDOW_NAME, self._on_mouse)
         self._set_trackbar(TRACKBAR_FRAME, self.current_frame_idx)
-        self._set_trackbar(TRACKBAR_ALPHA, int(self.args.alpha * 100))
 
         from gui_panel import ControlPanel
         self.panel = ControlPanel(self)
@@ -546,8 +575,6 @@ class StroboscopicGUI:
                 self.action("preview_frame")
             elif key == ord("r") or key == ord("R"):
                 self.action("range_select")
-            elif key == ord("o") or key == ord("O"):
-                self.action("toggle_frame_object")
             elif key == ord("["):
                 obj = self.active_object()
                 if obj:
@@ -627,8 +654,9 @@ class StroboscopicGUI:
         else:
             canvas = frame.copy()
 
-        # 叠加跟踪点（始终显示）
-        self._draw_points_overlay(canvas)
+        # 叠加跟踪点（跟踪后隐藏）
+        if self._show_points_overlay:
+            self._draw_points_overlay(canvas)
 
         # 单帧预览 mask 叠加
         if self._preview_mask is not None:
@@ -696,6 +724,7 @@ class StroboscopicGUI:
         }
 
         self.state = GUIState.TRACKING
+        self._show_points_overlay = False  # 跟踪开始后隐藏彩色选点
 
         if self.inference_state is not None:
             self.predictor.reset_state(self.inference_state)
@@ -916,9 +945,12 @@ class StroboscopicGUI:
                     f" | Objs: {n_objs} | Masks: {n_masks}")
         else:
             marked = "K" if self.current_frame_idx in self.composite_frames else "-"
+            fps_str = f"fps={self.fps:.0f}" if self.args.process_fps else ""
+            alpha_str = f"alpha={self.get_frame_alpha(self.current_frame_idx):.2f}"
             info = (f"EDIT | Frame {self.current_frame_idx}/{self.n_frames}"
                     f" | Active: {active_name} | Marked: {len(self.composite_frames)}"
-                    f" | BG: {self.background_frame_idx} | [{marked}]")
+                    f" | BG: {self.background_frame_idx} | [{marked}]"
+                    f" | {alpha_str} {fps_str}")
 
         cv2.putText(canvas, info, (10, 22), cv2.FONT_HERSHEY_SIMPLEX,
                     0.5, (220, 220, 220), 1, cv2.LINE_AA)
@@ -958,8 +990,9 @@ class StroboscopicGUI:
                 if not mask_clean.any():
                     continue
                 m = mask_clean.astype(np.float32)[..., None]
-                canvas = (canvas * (1.0 - self.args.alpha * m)
-                          + frame.astype(np.float32) * (self.args.alpha * m))
+                fa = self.get_frame_alpha(fidx)
+                canvas = (canvas * (1.0 - fa * m)
+                          + frame.astype(np.float32) * (fa * m))
 
         # 种子帧 100% 不透明置顶
         for obj in self.objects:
@@ -1023,6 +1056,21 @@ class StroboscopicGUI:
             finally:
                 self._in_modal = False
         self._set_status("内存不足，已有 mask 已保留。请降低参数重试。", "error")
+
+    # ── Alpha 系统 ──
+    def get_frame_alpha(self, frame_idx: int) -> float:
+        """返回指定帧的 alpha 值（逐帧覆盖 > 渐变插值）"""
+        if frame_idx in self.per_frame_alpha:
+            return self.per_frame_alpha[frame_idx]
+        frames = sorted(self.composite_frames)
+        if not frames or len(frames) == 1:
+            return self.alpha_start
+        if frame_idx <= frames[0]:
+            return self.alpha_start
+        if frame_idx >= frames[-1]:
+            return self.alpha_end
+        t = (frame_idx - frames[0]) / (frames[-1] - frames[0])
+        return self.alpha_start + t * (self.alpha_end - self.alpha_start)
 
     def close(self) -> None:
         if self.inference_state is not None:
