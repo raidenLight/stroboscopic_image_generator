@@ -164,27 +164,24 @@ class ControlPanel:
             self._build_alpha_section()
             self._build_marked_list()
 
-    # ── EDIT 操作（新建 + 预览 + 跟踪 同行）──
+    # ── EDIT 操作（预览 + 跟踪 + 选点模式 同行）──
     def _build_edit_actions(self) -> None:
         r = ttk.Frame(self.actions_inner)
         r.pack(fill=tk.X)
-        ttk.Button(r, text="👁 保存并预览 (P)", command=lambda: self.gui.action("preview_frame")).pack(
-            side=tk.LEFT, padx=1, fill=tk.X, expand=True, ipadx=8)
+        ttk.Button(r, text="👁 保存并预览", command=lambda: self.gui.action("preview_frame")).pack(
+            side=tk.LEFT, padx=1, fill=tk.X, expand=True)
 
         dirty = [o for o in self.gui.objects if o._dirty and o.points]
         if dirty:
-            btn = tk.Button(r, text=f"▶ 跟踪 ({len(dirty)})", bg="#4CAF50",
+            btn = tk.Button(r, text=f"▶ 跟踪({len(dirty)})", bg="#4CAF50",
                             fg="white", font=("", 9, "bold"), relief=tk.RAISED,
                             command=lambda: self.gui.action("start_tracking"))
         else:
             btn = tk.Button(r, text="▶ 跟踪", bg="#cccccc", fg="#888888",
                             font=("", 9), relief=tk.FLAT, state=tk.DISABLED)
         btn.pack(side=tk.LEFT, padx=1, fill=tk.X, expand=True, ipady=2)
-        # 选点模式切换按钮（第二行）
-        r2 = ttk.Frame(self.actions_inner)
-        r2.pack(fill=tk.X, pady=(2, 0))
-        self._pt_btn = ttk.Button(r2, command=lambda: self.gui.action("toggle_point_mode"))
-        self._pt_btn.pack(fill=tk.X)
+        self._pt_btn = ttk.Button(r, command=lambda: self.gui.action("toggle_point_mode"))
+        self._pt_btn.pack(side=tk.LEFT, padx=1, fill=tk.X, expand=True)
 
     # ── 视图 ──
     def _build_view_section(self) -> None:
@@ -205,45 +202,40 @@ class ControlPanel:
         self._range_btn.pack(side=tk.LEFT, padx=1, fill=tk.X, expand=True)
         ttk.Button(row1, text="清除标记", command=lambda: self.gui.action("clear_all_marked")).pack(side=tk.LEFT, padx=1, fill=tk.X, expand=True)
 
-        # 间隔选择：起始帧 + 中止帧 + 间隔(秒) + 应用
+        # 间隔选择
         row2 = ttk.Frame(self.select_inner)
         row2.pack(fill=tk.X, pady=1)
         ttk.Label(row2, text="起始帧:").pack(side=tk.LEFT)
         ttk.Entry(row2, textvariable=self._range_start_str, width=5).pack(side=tk.LEFT, padx=1)
-        ttk.Label(row2, text="中止帧:").pack(side=tk.LEFT, padx=(4, 0))
+        ttk.Label(row2, text="中止帧:").pack(side=tk.LEFT, padx=(3, 0))
         ttk.Entry(row2, textvariable=self._range_end_str, width=5).pack(side=tk.LEFT, padx=1)
-        ttk.Label(row2, text="间隔(秒):").pack(side=tk.LEFT, padx=(4, 0))
-        ttk.Entry(row2, textvariable=self._interval_str, width=5).pack(side=tk.LEFT, padx=2)
-        ttk.Button(row2, text="应用 (I)", command=lambda: self.gui.action("apply_interval")).pack(side=tk.LEFT, padx=2)
+        ttk.Label(row2, text="间隔(秒):").pack(side=tk.LEFT, padx=(3, 0))
+        ttk.Entry(row2, textvariable=self._interval_str, width=4).pack(side=tk.LEFT, padx=1)
+        ttk.Button(row2, text="应用(I)", command=lambda: self.gui.action("apply_interval")).pack(side=tk.LEFT, padx=2)
 
-    # ── Alpha ──
+    # ── Alpha（单行）──
     def _build_alpha_section(self) -> None:
         self._alpha_start_str.set(f"{self.gui.alpha_start:.2f}")
         self._alpha_end_str.set(f"{self.gui.alpha_end:.2f}")
         self._bg_alpha_str = tk.StringVar(value=f"{self.gui.background_alpha:.2f}")
 
-        # 首帧+末帧渐变
-        r1 = ttk.Frame(self.alpha_inner)
-        r1.pack(fill=tk.X)
-        ttk.Label(r1, text="首帧:").pack(side=tk.LEFT)
-        e1 = ttk.Entry(r1, textvariable=self._alpha_start_str, width=5)
-        e1.pack(side=tk.LEFT, padx=2)
+        r = ttk.Frame(self.alpha_inner)
+        r.pack(fill=tk.X)
+        ttk.Label(r, text="首帧:").pack(side=tk.LEFT)
+        e1 = ttk.Entry(r, textvariable=self._alpha_start_str, width=4)
+        e1.pack(side=tk.LEFT, padx=1)
         e1.bind("<Return>", lambda e: self._apply_alpha_gradient())
-        ttk.Label(r1, text="末帧:").pack(side=tk.LEFT, padx=(4, 0))
-        e2 = ttk.Entry(r1, textvariable=self._alpha_end_str, width=5)
-        e2.pack(side=tk.LEFT, padx=2)
+        ttk.Label(r, text="末帧:").pack(side=tk.LEFT, padx=(3, 0))
+        e2 = ttk.Entry(r, textvariable=self._alpha_end_str, width=4)
+        e2.pack(side=tk.LEFT, padx=1)
         e2.bind("<Return>", lambda e: self._apply_alpha_gradient())
-        ttk.Button(r1, text="✓ 应用", command=self._apply_alpha_gradient).pack(side=tk.LEFT, padx=4)
-        ttk.Button(r1, text="↩ 清除逐帧", command=lambda: self.gui.action("reset_per_frame_alphas")).pack(side=tk.RIGHT)
-
-        # 背景 alpha（独立，不计入渐变）
-        r2 = ttk.Frame(self.alpha_inner)
-        r2.pack(fill=tk.X, pady=(2, 0))
-        ttk.Label(r2, text="背景 α:").pack(side=tk.LEFT)
-        e_bg = ttk.Entry(r2, textvariable=self._bg_alpha_str, width=5)
-        e_bg.pack(side=tk.LEFT, padx=2)
+        ttk.Button(r, text="✓", width=2, command=self._apply_alpha_gradient).pack(side=tk.LEFT, padx=2)
+        ttk.Label(r, text="背景:").pack(side=tk.LEFT, padx=(6, 0))
+        e_bg = ttk.Entry(r, textvariable=self._bg_alpha_str, width=4)
+        e_bg.pack(side=tk.LEFT, padx=1)
         e_bg.bind("<Return>", lambda e: self._apply_bg_alpha())
-        ttk.Button(r2, text="✓", width=3, command=self._apply_bg_alpha).pack(side=tk.LEFT, padx=2)
+        ttk.Button(r, text="✓", width=2, command=self._apply_bg_alpha).pack(side=tk.LEFT, padx=1)
+        ttk.Button(r, text="↩清除", command=lambda: self.gui.action("reset_per_frame_alphas")).pack(side=tk.RIGHT, padx=(4, 0))
 
     def _apply_bg_alpha(self):
         try:
