@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import contextlib
-import time
+import tkinter as tk
 from typing import TYPE_CHECKING
 
 import cv2
@@ -447,6 +447,11 @@ class StroboscopicGUI:
                 key = key_raw & 0xFF
                 self._handle_keyboard(key, key_raw)
 
+            # ★ 先同步面板：确保状态变化触发的控件创建/销毁在渲染前完成，
+            # 避免 _advance_tracking() 访问尚未创建的 progress/label 控件。
+            if self.panel:
+                self.panel.sync_from_gui()
+
             # 渲染
             if self.state == GUIState.TRACKING:
                 canvas = self._render_tracking()
@@ -460,10 +465,6 @@ class StroboscopicGUI:
                 self.status_timer -= 1
                 if self.status_timer == 0:
                     self.status_message = ""
-
-            # 同步面板
-            if self.panel:
-                self.panel.sync_from_gui()
 
             if not self._quit_flag:
                 self.panel.root.after(33, tick)
@@ -758,8 +759,11 @@ class StroboscopicGUI:
 
             if self.panel and hasattr(self.panel, "progress_var"):
                 pct = min(100, 100 * self._tracking_frame_count / max(self._tracking_total_frames, 1))
-                self.panel.progress_var.set(pct)
-                self.panel.lbl_progress.configure(text=f"{pct:.0f}% ({self._tracking_direction})")
+                try:
+                    self.panel.progress_var.set(pct)
+                    self.panel.lbl_progress.configure(text=f"{pct:.0f}% ({self._tracking_direction})")
+                except tk.TclError:
+                    pass  # 控件在重建中被销毁，跳过本次更新
 
             return True
         except StopIteration:
