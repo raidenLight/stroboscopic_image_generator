@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from gui_app import StroboscopicGUI
 
 PANEL_WIDTH = 460
-PANEL_HEIGHT = 800
+PANEL_HEIGHT = 680
 
 
 class ControlPanel:
@@ -22,7 +22,7 @@ class ControlPanel:
         self.root.title("控制面板 — 频闪图像生成器")
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.resizable(True, True)
-        self.root.minsize(360, 720)
+        self.root.minsize(360, 620)
         self.root.geometry(f"{PANEL_WIDTH}x{PANEL_HEIGHT}+50+50")
         self.root.bind_all("<Key>", self._on_tk_key)
 
@@ -114,19 +114,27 @@ class ControlPanel:
         self.marked_inner = ttk.Frame(self.frm_marked)
         self.marked_inner.pack(fill=tk.BOTH, expand=True)
 
-        # ── 快捷键 + 操作按钮（最底部）──
+        # ── 快捷键 + 操作按钮（最底部，双行防止文字溢出）──
         bottom = ttk.Frame(self.root)
         bottom.pack(fill=tk.X, padx=3, pady=1, side=tk.BOTTOM)
-        ttk.Label(bottom, text="P预览 K标记 I间隔 R范围 B背景 V视图 S保存  Enter跟踪 ←→导航 Tab Backspace Esc",
-                   font=("", 8)).pack(side=tk.LEFT, anchor=tk.CENTER)
-        self.btn_restart = ttk.Button(bottom, text="↺ 重置",
+        # 行1：操作快捷键 + 重置按钮
+        r1 = ttk.Frame(bottom)
+        r1.pack(fill=tk.X)
+        ttk.Label(r1, text="P预览 K标记 I间隔 R范围 B背景  V视图 S保存",
+                   font=("", 8)).pack(side=tk.LEFT)
+        self.btn_restart = ttk.Button(r1, text="↺ 重置",
                                        command=lambda: self.gui.action("restart"))
         self.btn_restart.pack(side=tk.RIGHT, padx=2)
+        # 行2：导航快捷键
+        r2 = ttk.Frame(bottom)
+        r2.pack(fill=tk.X)
+        ttk.Label(r2, text="Enter跟踪  ←→导航  Ctrl+←→跳标记  Tab切换物体  Backspace回退  Esc退出",
+                   font=("", 8)).pack(side=tk.LEFT)
 
         # ── 日志栏（倒数第二行）──
         log_frame = tk.Frame(self.root, bg="#f0f0e0", relief=tk.SUNKEN, bd=1)
         log_frame.pack(fill=tk.X, padx=3, pady=(1, 0), side=tk.BOTTOM)
-        self._log_text = tk.Text(log_frame, height=6, font=("微软雅黑", 8), fg="#444444",
+        self._log_text = tk.Text(log_frame, height=8, font=("微软雅黑", 8), fg="#444444",
                                  bg="#f0f0e0", wrap=tk.WORD, state=tk.DISABLED, relief=tk.FLAT,
                                  bd=0, padx=3, pady=1)
         log_sb = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=self._log_text.yview)
@@ -328,7 +336,7 @@ class ControlPanel:
         # ── 列定义: [行选] [帧标签] [obj1] [obj2]... [α] [✕] ──
         columns = ["row"] + ["frame"] + [f"obj_{o.obj_id}" for o in objs] + ["alpha", "del"]
         tree = ttk.Treeview(self.marked_inner, columns=columns, show="headings",
-                            selectmode="browse", height=8)
+                            selectmode="browse", height=6)
 
         # Col 0: 行选框
         tree.heading("row", text="")
