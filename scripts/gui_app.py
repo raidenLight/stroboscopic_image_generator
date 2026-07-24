@@ -967,12 +967,13 @@ class StroboscopicGUI:
         ts = f"{int(t_sec // 60)} min {t_sec % 60:.2f} s"
         if self.state == GUIState.TRACKING:
             n_masks = sum(len(m) for m in self.masks.values())
-            info = (f"TRACKING | Frame {self.current_frame_idx}/{self.n_frames} {ts}"
+            info = (f"TRACKING | Frame {self.current_frame_idx}/{self.n_frames} {ts} fps={self.fps:.0f}"
                     f" | Objs: {n_objs} | Masks: {n_masks}")
         else:
             marked = "K" if self.current_frame_idx in self.composite_frames else "-"
             alpha_str = f"alpha={self.get_frame_alpha(self.current_frame_idx):.2f}"
-            info = (f"EDIT | Frame {self.current_frame_idx}/{self.n_frames} {ts}"
+            fps_str = f"fps={self.fps:.0f}" if self.args.process_fps else ""
+            info = (f"EDIT | Frame {self.current_frame_idx}/{self.n_frames} {ts} {fps_str}"
                     f" | Active: {active_name} | Marked: {len(self.composite_frames)}"
                     f" | BG: {self.background_frame_idx} | [{marked}]"
                     f" | {alpha_str}")
