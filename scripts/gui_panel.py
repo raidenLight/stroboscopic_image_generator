@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from gui_app import StroboscopicGUI
 
 PANEL_WIDTH = 460
-PANEL_HEIGHT = 720
+PANEL_HEIGHT = 760
 
 
 class ControlPanel:
@@ -22,7 +22,7 @@ class ControlPanel:
         self.root.title("控制面板 — 频闪图像生成器")
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.resizable(True, True)
-        self.root.minsize(360, 720)
+        self.root.minsize(360, 760)
         self.root.geometry(f"{PANEL_WIDTH}x{PANEL_HEIGHT}+50+50")
         self.root.bind_all("<Key>", self._on_tk_key)
         # 初始化时短暂置顶，确保面板不被 OpenCV 窗口遮挡
