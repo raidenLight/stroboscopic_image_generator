@@ -1162,7 +1162,7 @@ def _draw_timeline_on_canvas(gui: StroboscopicGUI, canvas: np.ndarray) -> np.nda
     cv2.line(out, (cur_x, y0), (cur_x, y0 + TIMELINE_H), (255, 255, 255), 2)
 
     # 帧号标签（避免与播放按钮重叠）
-    label_x = max(cur_x + 4, 38)
+    label_x = max(cur_x + 4, 26)
     cv2.putText(out, f"F{gui.current_frame_idx}", (label_x, y0 + TIMELINE_H - 3),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1, cv2.LINE_AA)
 
@@ -1172,16 +1172,16 @@ def _draw_timeline_on_canvas(gui: StroboscopicGUI, canvas: np.ndarray) -> np.nda
     cv2.putText(out, marked_info, (w - tw - 6, y0 + TIMELINE_H - 3),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1, cv2.LINE_AA)
 
-    # ── 播放/暂停按钮（左下角，稍大）──
-    bx, by = 4, y0 + bar_h + mid_h + 1
-    bw, bh = 30, 16
+    # ── 播放/暂停按钮（左下角，方形）──
+    bx, by = 4, y0 + bar_h + mid_h - 1
+    bw, bh = 18, 18
     cv2.rectangle(out, (bx, by), (bx + bw, by + bh), (80, 80, 80), -1)
     cv2.rectangle(out, (bx, by), (bx + bw, by + bh), (180, 180, 180), 1)
     if gui._playing:
-        cv2.rectangle(out, (bx + 8, by + 3), (bx + 13, by + bh - 4), (220, 220, 220), -1)
-        cv2.rectangle(out, (bx + 17, by + 3), (bx + 22, by + bh - 4), (220, 220, 220), -1)
+        cv2.rectangle(out, (bx + 4, by + 3), (bx + 7, by + bh - 4), (220, 220, 220), -1)
+        cv2.rectangle(out, (bx + 11, by + 3), (bx + 14, by + bh - 4), (220, 220, 220), -1)
     else:
-        pts = np.array([[bx + 9, by + 3], [bx + 9, by + bh - 4], [bx + 22, by + bh // 2]], np.int32)
+        pts = np.array([[bx + 5, by + 3], [bx + 5, by + bh - 4], [bx + 14, by + bh // 2]], np.int32)
         cv2.fillPoly(out, [pts], (180, 220, 180))
     gui._play_btn_rect = (bx, by, bw, bh)
 
