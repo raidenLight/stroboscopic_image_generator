@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from gui_app import StroboscopicGUI
 
 PANEL_WIDTH = 460
-PANEL_HEIGHT = 750
+PANEL_HEIGHT = 780
 
 
 class ControlPanel:
@@ -22,7 +22,7 @@ class ControlPanel:
         self.root.title("控制面板 — 频闪图像生成器")
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.resizable(True, True)
-        self.root.minsize(360, 700)
+        self.root.minsize(360, 720)
         self.root.geometry(f"{PANEL_WIDTH}x{PANEL_HEIGHT}+50+50")
         self.root.bind_all("<Key>", self._on_tk_key)
 
@@ -117,8 +117,10 @@ class ControlPanel:
         # ── 快捷键 + 操作按钮（最底部）──
         bottom = ttk.Frame(self.root)
         bottom.pack(fill=tk.X, padx=3, pady=1, side=tk.BOTTOM)
-        ttk.Label(bottom, text="P预览 Enter跟踪 K标记 I间隔 R范围 B背景 V视图 S保存 ←→ Tab Backspace Esc",
-                   font=("", 8)).pack(side=tk.LEFT, anchor=tk.CENTER)
+        ttk.Label(bottom, text="P预览 K标记 I间隔 R范围 B背景 V视图 S保存",
+                   font=("", 8)).pack(anchor=tk.W)
+        ttk.Label(bottom, text="Enter跟踪 ←→导航 Tab切物体 Backspace删点 Esc退出",
+                   font=("", 8)).pack(anchor=tk.W)
         self.btn_restart = ttk.Button(bottom, text="↺ 重置全部",
                                        command=lambda: self.gui.action("restart"))
         self.btn_restart.pack(side=tk.RIGHT, padx=2)
