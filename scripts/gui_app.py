@@ -1161,29 +1161,28 @@ def _draw_timeline_on_canvas(gui: StroboscopicGUI, canvas: np.ndarray) -> np.nda
     cur_x = int(w * (gui.current_frame_idx + 0.5) / max(n, 1))
     cv2.line(out, (cur_x, y0), (cur_x, y0 + TIMELINE_H), (255, 255, 255), 2)
 
-    # 帧号标签
-    cv2.putText(out, f"F{gui.current_frame_idx}", (cur_x + 4, y0 + TIMELINE_H - 3),
+    # 帧号标签（避免与播放按钮重叠）
+    label_x = max(cur_x + 4, 38)
+    cv2.putText(out, f"F{gui.current_frame_idx}", (label_x, y0 + TIMELINE_H - 3),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1, cv2.LINE_AA)
 
-    # 标记帧计数
+    # 标记帧计数（右边）
     marked_info = f"Marked: {len(gui.composite_frames)}"
-    cv2.putText(out, marked_info, (5, y0 + TIMELINE_H - 3),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.35, (200, 200, 200), 1, cv2.LINE_AA)
+    (tw, _), _ = cv2.getTextSize(marked_info, cv2.FONT_HERSHEY_SIMPLEX, 0.4, 1)
+    cv2.putText(out, marked_info, (w - tw - 6, y0 + TIMELINE_H - 3),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1, cv2.LINE_AA)
 
-    # ── 播放/暂停按钮（右下角）──
-    bx, by = w - 26, y0 + bar_h + mid_h + 1
-    bw, bh = 24, 14
+    # ── 播放/暂停按钮（左下角，稍大）──
+    bx, by = 4, y0 + bar_h + mid_h + 1
+    bw, bh = 30, 16
     cv2.rectangle(out, (bx, by), (bx + bw, by + bh), (80, 80, 80), -1)
     cv2.rectangle(out, (bx, by), (bx + bw, by + bh), (180, 180, 180), 1)
     if gui._playing:
-        # 暂停图标：两条竖线
-        cv2.rectangle(out, (bx + 6, by + 3), (bx + 10, by + bh - 4), (220, 220, 220), -1)
-        cv2.rectangle(out, (bx + 14, by + 3), (bx + 18, by + bh - 4), (220, 220, 220), -1)
+        cv2.rectangle(out, (bx + 8, by + 3), (bx + 13, by + bh - 4), (220, 220, 220), -1)
+        cv2.rectangle(out, (bx + 17, by + 3), (bx + 22, by + bh - 4), (220, 220, 220), -1)
     else:
-        # 播放图标：三角形
-        pts = np.array([[bx + 7, by + 3], [bx + 7, by + bh - 4], [bx + 18, by + bh // 2]], np.int32)
+        pts = np.array([[bx + 9, by + 3], [bx + 9, by + bh - 4], [bx + 22, by + bh // 2]], np.int32)
         cv2.fillPoly(out, [pts], (180, 220, 180))
-    # 存储按钮区域供点击检测
     gui._play_btn_rect = (bx, by, bw, bh)
 
     return out
