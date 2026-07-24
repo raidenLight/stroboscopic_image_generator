@@ -8,9 +8,6 @@ from typing import TYPE_CHECKING
 
 from gui_types import GUIState
 
-# 这些常量仅在 _jump_to_frame 中被引用
-from gui_types import TRACKBAR_FRAME
-
 if TYPE_CHECKING:
     from gui_app import StroboscopicGUI
 
@@ -483,7 +480,6 @@ class ControlPanel:
     def _jump_to_frame(self, fidx: int) -> None:
         """双击帧列表跳转到该帧。"""
         self.gui.current_frame_idx = fidx
-        self.gui._set_trackbar(TRACKBAR_FRAME, fidx)
         self.gui._preview_dirty = True
         self.gui._preview_mask = None
 

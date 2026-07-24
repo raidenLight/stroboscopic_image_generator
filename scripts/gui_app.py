@@ -446,10 +446,7 @@ class StroboscopicGUI:
     # ==================================================================
     def run(self) -> None:
         cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
-        cv2.createTrackbar(TRACKBAR_FRAME, WINDOW_NAME, 0, max(0, self.n_frames - 1),
-                           self._on_trackbar_frame)
         cv2.setMouseCallback(WINDOW_NAME, self._on_mouse)
-        self._set_trackbar(TRACKBAR_FRAME, self.current_frame_idx)
 
         from gui_panel import ControlPanel
         self.panel = ControlPanel(self)
@@ -528,7 +525,6 @@ class StroboscopicGUI:
                 self.action("prev_marked")
             else:
                 self.current_frame_idx = (self.current_frame_idx - 1) % self.n_frames
-                self._set_trackbar(TRACKBAR_FRAME, self.current_frame_idx)
                 self._preview_dirty = True
                 self._preview_mask = None  # 移动帧清除预览
         elif key_raw in (83, 65363, 2555904):  # →
@@ -536,7 +532,6 @@ class StroboscopicGUI:
                 self.action("next_marked")
             else:
                 self.current_frame_idx = (self.current_frame_idx + 1) % self.n_frames
-                self._set_trackbar(TRACKBAR_FRAME, self.current_frame_idx)
                 self._preview_dirty = True
                 self._preview_mask = None
 
@@ -613,6 +608,16 @@ class StroboscopicGUI:
     def _on_mouse(self, event: int, x: int, y: int, _flags: int, _param: object) -> None:
         if self.state != GUIState.EDIT:
             return
+        # ★ 时间线区域：点击或拖拽跳转帧
+        if (event == cv2.EVENT_LBUTTONDOWN or
+            (event == cv2.EVENT_MOUSEMOVE and _flags & cv2.EVENT_FLAG_LBUTTON)):
+            if self.h <= y < self.h + TIMELINE_H:
+                fidx = int(x * self.n_frames / max(self.w, 1))
+                self.current_frame_idx = max(0, min(fidx, self.n_frames - 1))
+                self._preview_dirty = True
+                self._preview_mask = None
+                return
+
         if event == cv2.EVENT_LBUTTONDOWN:
             if 0 <= x < self.w and 0 <= y < self.h:
                 # 首次点击：仅关闭引导覆盖层，不添加点
@@ -787,7 +792,6 @@ class StroboscopicGUI:
 
             self._tracking_frame_count += 1
             self.current_frame_idx = fidx
-            self._set_trackbar(TRACKBAR_FRAME, self.current_frame_idx)
 
             if self.panel and hasattr(self.panel, "progress_var"):
                 pct = min(100, 100 * self._tracking_frame_count / max(self._tracking_total_frames, 1))
@@ -827,7 +831,6 @@ class StroboscopicGUI:
                 self.state = GUIState.EDIT
                 self._preview_mask = None          # 清除预览残影
                 self.current_frame_idx = min_seed
-                self._set_trackbar(TRACKBAR_FRAME, self.current_frame_idx)
                 total_masks = sum(len(m) for m in self.masks.values())
                 self._set_status(f"跟踪完成。{total_masks} 个 mask，覆盖 {len(self.masks)} 帧。", "success")
                 self._preview_dirty = True
