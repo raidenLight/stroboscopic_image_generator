@@ -55,11 +55,12 @@ def read_frame_at_fast(cap, frame_idx: int, cache: dict[int, np.ndarray]) -> np.
 class StroboscopicGUI:
     """交互式频闪合成，SAM2 多物体跟踪。"""
 
-    def __init__(self, cap, predictor, video_path, n_frames, fps, args, tmp_dir):
+    def __init__(self, cap, predictor, video_path, n_frames, fps, args, tmp_dir, source_fps=None):
         self.cap = cap
         self.video_path = video_path
         self.n_frames = n_frames
         self.fps = fps
+        self.source_fps = fps  # 原始视频帧率，用于显示时间戳
         frame = read_frame_at_fast(cap, 0, {})
         if frame.size == 0:
             raise RuntimeError("无法读取第一帧。")

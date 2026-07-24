@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module type="PYTHON_MODULE" version="4">
+  <component name="NewModuleRootManager">
+    <content url="file://$MODULE_DIR$">
+      <excludeFolder url="file://$MODULE_DIR$/.claude/worktrees/chinese-comments/.venv" />
+      <excludeFolder url="file://$MODULE_DIR$/.claude/worktrees/fix-gil-crash/.venv" />
+      <excludeFolder url="file://$MODULE_DIR$/.claude/worktrees/fix-gui-bugs/.venv" />
+      <excludeFolder url="file://$MODULE_DIR$/.claude/worktrees/fix-memory/.venv" />
+      <excludeFolder url="file://$MODULE_DIR$/.claude/worktrees/fix-oom-recovery/.venv" />
+      <excludeFolder url="file://$MODULE_DIR$/.claude/worktrees/fix-retrack-hang/.venv" />
+      <excludeFolder url="file://$MODULE_DIR$/.claude/worktrees/fix-tk-button/.venv" />
+      <excludeFolder url="file://$MODULE_DIR$/.claude/worktrees/gpu-cuda-config/.venv" />
+      <excludeFolder url="file://$MODULE_DIR$/.claude/worktrees/gui-script/.venv" />
+      <excludeFolder url="file://$MODULE_DIR$/.claude/worktrees/multi-obj-gui/.venv" />
+      <excludeFolder url="file://$MODULE_DIR$/.venv" />
+    </content>
+    <orderEntry type="jdk" jdkName="uv (stroboscopic_image_generator)" jdkType="Python SDK" />
+    <orderEntry type="sourceFolder" forTests="false" />
+  </component>
+  <component name="PyDocumentationSettings">
+    <option name="format" value="PLAIN" />
+    <option name="myDocStringFormat" value="Plain" />
+  </component>
+</module>

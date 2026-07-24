@@ -180,7 +180,8 @@ def main() -> None:
             device = resolve_device(args.device)
             predictor = build_predictor(args, device=device)
             gui = StroboscopicGUI(cap, predictor, processing_video,
-                                  n_frames, fps, args, Path(tmp_dir))
+                                  n_frames, fps, args, Path(tmp_dir),
+                                  source_fps=source_fps)
             with sam_inference_context(device):
                 try:
                     gui.run()
