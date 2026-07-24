@@ -343,7 +343,7 @@ class ControlPanel:
         tree.heading("row", text="")
         tree.column("row", width=20, anchor=tk.CENTER, stretch=True, minwidth=18)
         tree.heading("frame", text=f"帧 / 时间 ({len(frames)})")
-        tree.column("frame", width=80, anchor=tk.W, stretch=True, minwidth=60)
+        tree.column("frame", width=100, anchor=tk.W, stretch=True, minwidth=60)
         for obj in objs:
             col = f"obj_{obj.obj_id}"
             tree.heading(col, text=f"☑ {obj.name}",
@@ -455,26 +455,36 @@ class ControlPanel:
         tree.bind("<MouseWheel>", _tree_wheel)
 
     def _col_toggle_all(self, tree, obj_id: int) -> None:
-        """列头点击：全选/全不选该物体的所有帧。"""
-        # 判断当前是否全部选中
+        """列头点击：全选/全不选该物体的所有帧，立即刷新单元格和列头。"""
+        # 判断当前全部选中 → 全不选；否则 → 全选
         all_checked = True
         for fidx in self.gui.composite_frames:
-            has_mask = self.gui.masks.get(fidx, {}).get(obj_id) is not None
-            if not has_mask:
-                continue
             override = self.gui.frame_overrides.get(fidx, {}).get(obj_id)
             if override is not None and not override:
                 all_checked = False
                 break
-            if override is None:
-                continue  # 默认 True
-        # 全不选 or 部分选 → 全选；全选 → 全不选
         new_val = not all_checked
+
+        # 更新模型
         for fidx in self.gui.composite_frames:
-            if self.gui.masks.get(fidx, {}).get(obj_id) is not None:
-                if fidx not in self.gui.frame_overrides:
-                    self.gui.frame_overrides[fidx] = {}
-                self.gui.frame_overrides[fidx][obj_id] = new_val
+            if fidx not in self.gui.frame_overrides:
+                self.gui.frame_overrides[fidx] = {}
+            self.gui.frame_overrides[fidx][obj_id] = new_val
+
+        # ★ 立即刷新 Treeview 单元格（与单击同理，不等 rebuild）
+        objs = self.gui.objects
+        obj_idx = next(i for i, o in enumerate(objs) if o.obj_id == obj_id)
+        col_idx = obj_idx + 2  # 0=row, 1=frame, 2+=objects
+        col_name = f"obj_{obj_id}"
+        for item in tree.get_children():
+            vals = list(tree.item(item, "values"))
+            has_mask = vals[col_idx] != "—"  # — 表示无mask
+            if has_mask:
+                vals[col_idx] = "☑" if new_val else "☐"
+                tree.item(item, values=vals)
+        # 更新列头文字
+        tree.heading(col_name, text=f"{'☑' if new_val else '☐'} {objs[obj_idx].name}")
+
         self.gui._data_version += 1
         self.gui._preview_dirty = True
 
