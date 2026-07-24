@@ -11,7 +11,7 @@ from gui_types import GUIState
 if TYPE_CHECKING:
     from gui_app import StroboscopicGUI
 
-PANEL_WIDTH = 400
+PANEL_WIDTH = 430
 PANEL_HEIGHT = 720
 
 
