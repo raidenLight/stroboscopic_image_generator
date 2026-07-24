@@ -111,6 +111,15 @@ class ControlPanel:
         self.root.title("Controls — Stroboscopic Generator")
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.resizable(True, True)
+        self.root.geometry("320x620+50+50")  # positioned away from video
+        self.root.attributes('-topmost', True)  # always visible
+        self.root.lift()
+        # NOTE: do NOT focus_force() — let OpenCV keep keyboard focus
+        # Release topmost after 3s so it doesn't block other apps
+        self.root.after(3000, lambda: self.root.attributes('-topmost', False))
+
+        # Bind keyboard events -> forward to GUI so both windows work
+        self.root.bind('<Key>', self._on_tk_key)
 
         # Style
         style = ttk.Style(self.root)
@@ -124,6 +133,7 @@ class ControlPanel:
 
         self._build_static()
         self._build_dynamic()
+        self.root.update()
 
     # ------------------------------------------------------------------
     # Static widgets (always present)
@@ -331,9 +341,16 @@ class ControlPanel:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
-    def update(self) -> None:
-        """Sync widget states from GUI and process tk events. Called per-frame."""
+    def update(self) -> bool:
+        """Sync widget states from GUI and process tk events. Called per-frame.
+        Returns False if the panel window was closed."""
         gui = self.gui
+
+        # Check if tkinter window was closed
+        try:
+            self.root.winfo_exists()
+        except tk.TclError:
+            return False
 
         # Check if state changed → rebuild dynamic widgets
         if (gui.state != self._last_state
@@ -393,7 +410,8 @@ class ControlPanel:
             self.root.update_idletasks()
             self.root.update()
         except tk.TclError:
-            pass
+            return False
+        return True
 
     def _rebuild_object_buttons(self) -> None:
         """Rebuild object selection buttons."""
@@ -419,6 +437,64 @@ class ControlPanel:
         """Show an error dialog."""
         from tkinter import messagebox
         messagebox.showerror("Error", msg)
+
+    def _on_tk_key(self, event: tk.Event) -> None:
+        """Forward keyboard events from tkinter window to the GUI."""
+        # Map tkinter key events to the same action names used by OpenCV key handler
+        key = event.keysym
+        char = event.char
+
+        if key == 'Escape':
+            self.gui.action("quit")
+        elif key == 'Return' or key == 'space':
+            if self.gui.state == GUIState.SETUP:
+                self.gui.action("start_tracking")
+            elif self.gui.state == GUIState.SELECTION:
+                self.gui.action("restart")
+        elif key == 'BackSpace' or key == 'Delete':
+            obj = self.gui.active_object()
+            if obj and obj.points:
+                obj.points.pop()
+        elif key in ('Left', 'Right', 'Up', 'Down'):
+            if key == 'Left':
+                self.gui.current_frame_idx = (self.gui.current_frame_idx - 1) % self.gui.n_frames
+            elif key == 'Right':
+                self.gui.current_frame_idx = (self.gui.current_frame_idx + 1) % self.gui.n_frames
+            self.gui._preview_dirty = True
+        elif char.lower() == 'k':
+            self.gui.action("mark_frame")
+        elif char.lower() == 'b':
+            self.gui.action("set_bg")
+        elif char.lower() == 'v':
+            cycle = {"mask": "composite", "composite": "original", "original": "mask"}
+            self.gui.action("view_" + cycle[self.gui.viz_mode])
+        elif char.lower() == 'i':
+            self.gui.action("apply_interval")
+        elif char.lower() == 's':
+            self.gui.action("save")
+        elif char.lower() == 'n':
+            self.gui.action("new_object")
+        elif char.lower() == 'r':
+            self.gui.action("clear_points")
+        elif char.lower() == '[':
+            obj = self.gui.active_object()
+            if obj:
+                obj.vis_start = self.gui.current_frame_idx
+                self.gui._preview_dirty = True
+        elif char.lower() == ']':
+            obj = self.gui.active_object()
+            if obj:
+                obj.vis_end = self.gui.current_frame_idx
+                self.gui._preview_dirty = True
+        elif char.lower() == '\\':
+            self.gui.action("reset_vis_range")
+        elif char in '123456789':
+            idx = int(char) - 1
+            if idx < len(self.gui.objects):
+                self.gui.action("select_object", idx)
+        elif key == 'Tab':
+            if self.gui.objects:
+                self.gui.active_obj_idx = (self.gui.active_obj_idx + 1) % len(self.gui.objects)
 
     def _on_close(self) -> None:
         self.gui.action("quit")
@@ -704,7 +780,8 @@ class StroboscopicGUI:
 
                 # Sync tkinter panel
                 if self.panel:
-                    self.panel.update()
+                    if not self.panel.update():
+                        break  # panel window was closed
         finally:
             if self.panel:
                 self.panel.destroy()
@@ -1175,6 +1252,8 @@ def main() -> None:
     device_name = resolve_device(args.device)
     print(f"Loading video: {args.video}")
     print(f"Device: {device_name}")
+    print("Note: SAM2 model runs 100% locally on your GPU.")
+    print("First run will download ~150MB model from HuggingFace to local cache.")
 
     with tempfile.TemporaryDirectory(prefix="sam2_gui_") as tmp_dir:
         processing_video, source_fps, was_downsampled = maybe_downsample_video(
