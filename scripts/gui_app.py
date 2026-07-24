@@ -234,6 +234,7 @@ class StroboscopicGUI:
                         self.predictor.reset_state(self.inference_state)
                 self.state = GUIState.EDIT
                 self._show_points_overlay = True
+                self._preview_mask = None          # 清除预览残影
                 n_preserved = sum(len(m) for m in self.masks.values())
                 self._set_status(f"跟踪已中止。{n_preserved} 个已有 mask 已保留。", "warn")
 
@@ -617,25 +618,30 @@ class StroboscopicGUI:
         frame = self._current_frame()
 
         if self.viz_mode == "composite":
+            # 合成视图：仅显示合成结果，不叠加当前帧/选点/预览mask
             canvas = self._get_composite_preview()
         elif self.viz_mode == "mask":
             canvas = self._draw_all_masks(frame)
+            # mask 视图下叠加跟踪点和预览mask
+            if self._show_points_overlay:
+                self._draw_points_overlay(canvas)
+            if self._preview_mask is not None:
+                overlay = np.zeros_like(canvas, dtype=np.uint8)
+                overlay[self._preview_mask] = (0, 255, 120)
+                cv2.addWeighted(overlay, 0.35, canvas, 1.0, 0, canvas)
+            if self._show_onboarding and not self.objects:
+                self._draw_onboarding(canvas)
         else:
             canvas = frame.copy()
-
-        # 叠加跟踪点（跟踪后隐藏）
-        if self._show_points_overlay:
-            self._draw_points_overlay(canvas)
-
-        # 单帧预览 mask 叠加
-        if self._preview_mask is not None:
-            overlay = np.zeros_like(canvas, dtype=np.uint8)
-            overlay[self._preview_mask] = (0, 255, 120)
-            cv2.addWeighted(overlay, 0.35, canvas, 1.0, 0, canvas)
-
-        # 引导覆盖层
-        if self._show_onboarding and not self.objects:
-            self._draw_onboarding(canvas)
+            # 原图视图下叠加跟踪点和预览mask
+            if self._show_points_overlay:
+                self._draw_points_overlay(canvas)
+            if self._preview_mask is not None:
+                overlay = np.zeros_like(canvas, dtype=np.uint8)
+                overlay[self._preview_mask] = (0, 255, 120)
+                cv2.addWeighted(overlay, 0.35, canvas, 1.0, 0, canvas)
+            if self._show_onboarding and not self.objects:
+                self._draw_onboarding(canvas)
 
         self._draw_status_bar(canvas)
         canvas = _draw_timeline_on_canvas(self, canvas)
@@ -694,6 +700,7 @@ class StroboscopicGUI:
 
         self.state = GUIState.TRACKING
         self._show_points_overlay = False  # 跟踪开始后隐藏彩色选点
+        self._preview_mask = None          # 清除旧的预览残影
 
         if self.inference_state is not None:
             self.predictor.reset_state(self.inference_state)
@@ -792,6 +799,7 @@ class StroboscopicGUI:
                         obj._dirty = False
                 self.state = GUIState.EDIT
                 self._show_points_overlay = True
+                self._preview_mask = None          # 清除预览残影
                 self.current_frame_idx = min_seed
                 self._set_trackbar(TRACKBAR_FRAME, self.current_frame_idx)
                 total_masks = sum(len(m) for m in self.masks.values())
