@@ -55,11 +55,12 @@ def read_frame_at_fast(cap, frame_idx: int, cache: dict[int, np.ndarray]) -> np.
 class StroboscopicGUI:
     """交互式频闪合成，SAM2 多物体跟踪。"""
 
-    def __init__(self, cap, predictor, video_path, n_frames, fps, args, tmp_dir):
+    def __init__(self, cap, predictor, video_path, n_frames, fps, args, tmp_dir, source_fps=None):
         self.cap = cap
         self.video_path = video_path
         self.n_frames = n_frames
         self.fps = fps
+        self.source_fps = fps  # 原始视频帧率，用于显示时间戳
         frame = read_frame_at_fast(cap, 0, {})
         if frame.size == 0:
             raise RuntimeError("无法读取第一帧。")
@@ -92,14 +93,18 @@ class StroboscopicGUI:
         self._preview_dirty = True
         self._preview_cache: np.ndarray | None = None
         self.frame_overrides: dict[int, dict[int, bool]] = {}
+        self._excluded_frames: set[int] = set()    # 行勾选排除的帧（仍在列表中但灰色）
+        self._data_version: int = 0                 # 数据变更版本号，触发面板重建
 
         # ── Alpha：渐变 + 逐帧覆盖 ──
-        self.alpha_start: float = args.alpha
-        self.alpha_end: float = args.alpha
+        self.alpha_start: float = 1.0
+        self.alpha_end: float = 1.0
+        self.background_alpha: float = 1.0
         self.per_frame_alpha: dict[int, float] = {}
 
-        # ── 跟踪后隐藏选点 ──
+        # ── 选点模式 ──
         self._show_points_overlay: bool = True
+        self._point_mode_active: bool = True   # 初始允许点击选点
 
         # ── 帧缓存 ──
         self._frame_cache: dict[int, np.ndarray] = {}
@@ -118,6 +123,8 @@ class StroboscopicGUI:
 
         # ── trackbar ──
         self._trackbar_locked = False
+        self._playing = False
+        self._play_btn_rect: tuple[int, int, int, int] | None = None
 
         self.args = args
         self.tmp_dir = tmp_dir
@@ -199,20 +206,6 @@ class StroboscopicGUI:
             idx = args[0] if args else self.active_obj_idx
             if 0 <= idx < len(self.objects):
                 obj = self.objects[idx]
-                has_mask = any(
-                    obj.obj_id in self.masks.get(f, {}) for f in self.masks
-                )
-                if self.panel:
-                    msg = f"确定要删除 {obj.name}？"
-                    if has_mask:
-                        msg += f"\n（将同时删除其所有跟踪 mask）"
-                    self._in_modal = True
-                    try:
-                        confirmed = self.panel.confirm("删除物体", msg)
-                    finally:
-                        self._in_modal = False
-                    if not confirmed:
-                        return
                 self._remove_object(obj)
                 self._set_status(f"已删除 {obj.name}", "warn")
 
@@ -245,7 +238,7 @@ class StroboscopicGUI:
                     with contextlib.suppress(Exception):
                         self.predictor.reset_state(self.inference_state)
                 self.state = GUIState.EDIT
-                self._show_points_overlay = True
+                self._preview_mask = None          # 清除预览残影
                 n_preserved = sum(len(m) for m in self.masks.values())
                 self._set_status(f"跟踪已中止。{n_preserved} 个已有 mask 已保留。", "warn")
 
@@ -276,6 +269,8 @@ class StroboscopicGUI:
         elif name == "clear_all_marked":
             self.composite_frames.clear()
             self.frame_overrides.clear()
+            self._excluded_frames.clear()
+            self._data_version += 1
             self._preview_dirty = True
             self._set_status("已清除所有标记帧。", "info")
 
@@ -288,6 +283,7 @@ class StroboscopicGUI:
                     self.frame_overrides[fidx] = {}
                 cur = self.frame_overrides[fidx].get(oid)
                 self.frame_overrides[fidx][oid] = not (cur if cur is not None else True)
+                self._data_version += 1
                 self._preview_dirty = True
 
         elif name == "set_per_frame_alpha":
@@ -295,6 +291,7 @@ class StroboscopicGUI:
             val = args[1] if len(args) > 1 else None
             if val is not None and 0.0 <= val <= 1.0:
                 self.per_frame_alpha[fidx] = val
+                self._data_version += 1
                 self._preview_dirty = True
 
         elif name == "set_alpha_start":
@@ -307,6 +304,12 @@ class StroboscopicGUI:
             val = args[0] if args else None
             if val is not None and 0.0 <= val <= 1.0:
                 self.alpha_end = val
+                self._preview_dirty = True
+
+        elif name == "set_bg_alpha":
+            val = args[0] if args else None
+            if val is not None and 0.0 <= val <= 1.0:
+                self.background_alpha = val
                 self._preview_dirty = True
 
         elif name == "reset_per_frame_alphas":
@@ -325,6 +328,7 @@ class StroboscopicGUI:
                         self.composite_frames.add(f)
                     self._range_start = None
                     self._set_status(f"范围 {start}→{end}：已添加 {end - start + 1} 帧。", "info")
+                    self._data_version += 1
                     self._preview_dirty = True
 
         elif name == "apply_interval":
@@ -347,6 +351,7 @@ class StroboscopicGUI:
                     self.composite_frames.add(f)
                     count += 1
                 self._set_status(f"间隔 {interval_sec}秒 ({r_start}→{r_end})：已添加 {count} 帧。", "info")
+                self._data_version += 1
                 self._preview_dirty = True
 
         elif name == "set_bg":
@@ -361,17 +366,25 @@ class StroboscopicGUI:
         elif name == "preview_frame":
             self._do_single_frame_preview()
 
+        elif name == "toggle_point_mode":
+            if self._point_mode_active:
+                # 退出选点：清除活跃物体未保存的点
+                obj = self.active_object()
+                if obj and obj._dirty:
+                    obj.points.clear()
+                    obj._dirty = False
+                self._point_mode_active = False
+                self._show_points_overlay = False
+                self._set_status("选点模式已关闭，点击图片不会添加点。", "info")
+            else:
+                self._point_mode_active = True
+                self._set_status("选点模式已开启，点击图片添加跟踪点。", "info")
+
         elif name == "save":
             if not self.composite_frames:
                 self._set_status("没有标记任何帧！请用 K 键或间隔选择来标记帧。", "error")
                 return
             msg = self._composite_and_save()
-            if self.panel:
-                self._in_modal = True
-                try:
-                    self.panel.show_info("保存成功", msg)
-                finally:
-                    self._in_modal = False
             self._set_status(msg, "success")
 
         elif name == "restart":
@@ -386,6 +399,8 @@ class StroboscopicGUI:
             self._tracked_obj_ids.clear()
             self.composite_frames.clear()
             self.frame_overrides.clear()
+            self._excluded_frames.clear()
+            self._data_version += 1
             self.background_frame_idx = 0
             self._range_start = None
             self._preview_dirty = True
@@ -395,9 +410,11 @@ class StroboscopicGUI:
             self.viz_mode = "mask"
             self._show_onboarding = True
             self._show_points_overlay = True
+            self._point_mode_active = True
             self.per_frame_alpha.clear()
-            self.alpha_start = self.args.alpha
-            self.alpha_end = self.args.alpha
+            self.alpha_start = 1.0
+            self.alpha_end = 1.0
+            self.background_alpha = 1.0
             self.state = GUIState.EDIT
             self._set_status("已重新开始。", "info")
 
@@ -410,6 +427,9 @@ class StroboscopicGUI:
         # 终端显示完整中文消息
         prefix = {"error": "[ERROR]", "warn": "[WARN]", "success": "[OK]", "info": "[INFO]"}
         print(f"{prefix.get(level, '[INFO]')} {msg}")
+        # 同步到控制面板日志栏
+        if self.panel:
+            self.panel.log(msg)
         if level == "error":
             self.status_color = (0, 0, 255)
             self.status_timer = 180
@@ -428,10 +448,7 @@ class StroboscopicGUI:
     # ==================================================================
     def run(self) -> None:
         cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
-        cv2.createTrackbar(TRACKBAR_FRAME, WINDOW_NAME, 0, max(0, self.n_frames - 1),
-                           self._on_trackbar_frame)
         cv2.setMouseCallback(WINDOW_NAME, self._on_mouse)
-        self._set_trackbar(TRACKBAR_FRAME, self.current_frame_idx)
 
         from gui_panel import ControlPanel
         self.panel = ControlPanel(self)
@@ -459,8 +476,14 @@ class StroboscopicGUI:
                 self.panel.destroy()
                 return
 
+            # ★ 自动播放
+            if self._playing and self.state == GUIState.EDIT:
+                self.current_frame_idx = (self.current_frame_idx + 1) % self.n_frames
+                self._preview_dirty = True
+                self._preview_mask = None
+
             # 键盘输入
-            key_raw = cv2.pollKey()
+            key_raw = cv2.waitKeyEx(1)  # 比pollKey更可靠，1ms不阻塞
             if key_raw >= 0:
                 key = key_raw & 0xFF
                 self._handle_keyboard(key, key_raw)
@@ -510,7 +533,6 @@ class StroboscopicGUI:
                 self.action("prev_marked")
             else:
                 self.current_frame_idx = (self.current_frame_idx - 1) % self.n_frames
-                self._set_trackbar(TRACKBAR_FRAME, self.current_frame_idx)
                 self._preview_dirty = True
                 self._preview_mask = None  # 移动帧清除预览
         elif key_raw in (83, 65363, 2555904):  # →
@@ -518,7 +540,6 @@ class StroboscopicGUI:
                 self.action("next_marked")
             else:
                 self.current_frame_idx = (self.current_frame_idx + 1) % self.n_frames
-                self._set_trackbar(TRACKBAR_FRAME, self.current_frame_idx)
                 self._preview_dirty = True
                 self._preview_mask = None
 
@@ -595,23 +616,47 @@ class StroboscopicGUI:
     def _on_mouse(self, event: int, x: int, y: int, _flags: int, _param: object) -> None:
         if self.state != GUIState.EDIT:
             return
+        # ★ 时间线区域：点击/拖拽跳转帧 或 播放按钮
+        if (event == cv2.EVENT_LBUTTONDOWN or
+            (event == cv2.EVENT_MOUSEMOVE and _flags & cv2.EVENT_FLAG_LBUTTON)):
+            if self.h <= y < self.h + TIMELINE_H:
+                # 播放按钮检测
+                if self._play_btn_rect is not None:
+                    bx, by, bw, bh = self._play_btn_rect
+                    if bx <= x <= bx + bw and by <= y <= by + bh:
+                        if event == cv2.EVENT_LBUTTONDOWN:
+                            self._playing = not self._playing
+                        return
+                # 时间线拖拽
+                fidx = int(x * self.n_frames / max(self.w, 1))
+                self.current_frame_idx = max(0, min(fidx, self.n_frames - 1))
+                self._preview_dirty = True
+                self._preview_mask = None
+                return
+
         if event == cv2.EVENT_LBUTTONDOWN:
             if 0 <= x < self.w and 0 <= y < self.h:
                 # 首次点击：仅关闭引导覆盖层，不添加点
                 if self._show_onboarding:
                     self._show_onboarding = False
                     return
-                # 如果无物体，自动创建一个
-                if not self.objects:
-                    self.action("new_object")
+                # ★ 选点模式未激活时忽略点击
+                if not self._point_mode_active:
+                    return
+                # 无物体 → 自动创建；活跃物体已保存 → 自动创建下一个
                 obj = self.active_object()
+                if obj is None or (obj.points and obj._saved):
+                    self.action("new_object")
+                    obj = self.active_object()
                 if obj:
                     # 第一个点 → 设置 seed_frame
                     if not obj.points:
                         obj.seed_frame = self.current_frame_idx
                     obj.points.append((x, y))
                     obj._dirty = True
+                    obj._saved = False  # 新加点 → 取消已保存状态
                     self._preview_dirty = True
+                    self._show_points_overlay = True
 
     # ==================================================================
     # Frame helpers
@@ -626,46 +671,46 @@ class StroboscopicGUI:
         frame = self._current_frame()
 
         if self.viz_mode == "composite":
+            # 合成视图：仅显示合成结果，不叠加当前帧/选点/预览mask
             canvas = self._get_composite_preview()
         elif self.viz_mode == "mask":
             canvas = self._draw_all_masks(frame)
+            # mask 视图下叠加跟踪点和预览mask
+            if self._show_points_overlay:
+                self._draw_points_overlay(canvas)
+            if self._preview_mask is not None:
+                overlay = np.zeros_like(canvas, dtype=np.uint8)
+                overlay[self._preview_mask] = (0, 255, 120)
+                cv2.addWeighted(overlay, 0.35, canvas, 1.0, 0, canvas)
+            if self._show_onboarding and not self.objects:
+                self._draw_onboarding(canvas)
         else:
             canvas = frame.copy()
-
-        # 叠加跟踪点（跟踪后隐藏）
-        if self._show_points_overlay:
-            self._draw_points_overlay(canvas)
-
-        # 单帧预览 mask 叠加
-        if self._preview_mask is not None:
-            overlay = np.zeros_like(canvas, dtype=np.uint8)
-            overlay[self._preview_mask] = (0, 255, 120)
-            cv2.addWeighted(overlay, 0.35, canvas, 1.0, 0, canvas)
-
-        # 引导覆盖层
-        if self._show_onboarding and not self.objects:
-            self._draw_onboarding(canvas)
+            # 原图视图下叠加跟踪点和预览mask
+            if self._show_points_overlay:
+                self._draw_points_overlay(canvas)
+            if self._preview_mask is not None:
+                overlay = np.zeros_like(canvas, dtype=np.uint8)
+                overlay[self._preview_mask] = (0, 255, 120)
+                cv2.addWeighted(overlay, 0.35, canvas, 1.0, 0, canvas)
+            if self._show_onboarding and not self.objects:
+                self._draw_onboarding(canvas)
 
         self._draw_status_bar(canvas)
         canvas = _draw_timeline_on_canvas(self, canvas)
         return canvas
 
     def _draw_points_overlay(self, canvas: np.ndarray) -> None:
-        """在所有物体位置绘制跟踪点。"""
+        """仅绘制当前活跃物体的跟踪点。"""
         active = self.active_object()
-        for obj in self.objects:
-            is_active = (obj is active)
-            for i, (px, py) in enumerate(obj.points, start=1):
-                b, g, r = int(obj.color[0]), int(obj.color[1]), int(obj.color[2])
-                if is_active:
-                    cv2.circle(canvas, (px, py), 7, (b, g, r), -1)
-                    cv2.circle(canvas, (px, py), 20, (b, g, r), 2)
-                    cv2.putText(canvas, str(i), (px + 8, py - 8),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (b, g, r), 2, cv2.LINE_AA)
-                else:
-                    cv2.circle(canvas, (px, py), 7, (b, g, r), 2)
-                    cv2.putText(canvas, obj.name, (px + 12, py - 8),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (b, g, r), 1, cv2.LINE_AA)
+        if active is None:
+            return
+        b, g, r = int(active.color[0]), int(active.color[1]), int(active.color[2])
+        for i, (px, py) in enumerate(active.points, start=1):
+            cv2.circle(canvas, (px, py), 7, (b, g, r), -1)
+            cv2.circle(canvas, (px, py), 20, (b, g, r), 2)
+            cv2.putText(canvas, str(i), (px + 8, py - 8),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (b, g, r), 2, cv2.LINE_AA)
 
     def _draw_onboarding(self, canvas: np.ndarray) -> None:
         """首次启动引导覆盖层。"""
@@ -703,6 +748,7 @@ class StroboscopicGUI:
 
         self.state = GUIState.TRACKING
         self._show_points_overlay = False  # 跟踪开始后隐藏彩色选点
+        self._preview_mask = None          # 清除旧的预览残影
 
         if self.inference_state is not None:
             self.predictor.reset_state(self.inference_state)
@@ -730,7 +776,7 @@ class StroboscopicGUI:
 
         self._tracked_obj_ids = {o.obj_id for o in all_with_points}
         self._tracking_pass = 0
-        self._tracking_total_frames = self.n_frames * 2
+        self._tracking_total_frames = self.n_frames  # forward+backward 各覆盖一半，总计约 n 帧
         self._tracking_frame_count = 0
         min_seed = min(o.seed_frame for o in all_with_points)
 
@@ -762,7 +808,6 @@ class StroboscopicGUI:
 
             self._tracking_frame_count += 1
             self.current_frame_idx = fidx
-            self._set_trackbar(TRACKBAR_FRAME, self.current_frame_idx)
 
             if self.panel and hasattr(self.panel, "progress_var"):
                 pct = min(100, 100 * self._tracking_frame_count / max(self._tracking_total_frames, 1))
@@ -800,9 +845,8 @@ class StroboscopicGUI:
                     if obj._dirty and obj.points:
                         obj._dirty = False
                 self.state = GUIState.EDIT
-                self._show_points_overlay = True
+                self._preview_mask = None          # 清除预览残影
                 self.current_frame_idx = min_seed
-                self._set_trackbar(TRACKBAR_FRAME, self.current_frame_idx)
                 total_masks = sum(len(m) for m in self.masks.values())
                 self._set_status(f"跟踪完成。{total_masks} 个 mask，覆盖 {len(self.masks)} 帧。", "success")
                 self._preview_dirty = True
@@ -846,10 +890,9 @@ class StroboscopicGUI:
                     offload_video_to_cpu=self.args.offload_video_to_cpu,
                     offload_state_to_cpu=self.args.offload_state_to_cpu,
                 )
-            else:
-                self.predictor.reset_state(self.inference_state)
 
-            # 注册当前物体的 prompt
+            # ★ 不 reset_state！直接注册当前物体的 prompt（SAM2 支持多物体共存）
+            # reset_state 会清除所有已注册物体，迫使已跟踪物体重新来过
             points_np = np.array(obj.points, dtype=np.float32)
             labels_np = np.ones(len(obj.points), dtype=np.int32)
             self.predictor.add_new_points_or_box(
@@ -883,7 +926,9 @@ class StroboscopicGUI:
                     if m.any():
                         self._preview_mask = m
                         self._preview_mask_obj_id = obj.obj_id
-                        self._set_status(f"预览: {obj.name} | 帧 {self.current_frame_idx}", "success")
+                        self._show_points_overlay = False
+                        obj._saved = True   # 预览成功 → 物体已保存，但不影响跟踪标志
+                        self._set_status(f"{obj.name} 已保存 | 帧 {self.current_frame_idx}", "success")
                     else:
                         self._preview_mask = None
                         self._set_status("预览：mask 为空，请调整跟踪点。", "warn")
@@ -918,18 +963,20 @@ class StroboscopicGUI:
         active = self.active_object()
         active_name = active.name if active else "—"
 
+        t_sec = self.current_frame_idx / max(self.fps, 1)
+        ts = f"{int(t_sec // 60)}min {t_sec % 60:.2f}s"
         if self.state == GUIState.TRACKING:
             n_masks = sum(len(m) for m in self.masks.values())
-            info = (f"TRACKING | Frame {self.current_frame_idx}/{self.n_frames}"
+            info = (f"TRACKING | Frame {self.current_frame_idx}/{self.n_frames} {ts} fps={self.fps:.0f}"
                     f" | Objs: {n_objs} | Masks: {n_masks}")
         else:
             marked = "K" if self.current_frame_idx in self.composite_frames else "-"
-            fps_str = f"fps={self.fps:.0f}" if self.args.process_fps else ""
             alpha_str = f"alpha={self.get_frame_alpha(self.current_frame_idx):.2f}"
-            info = (f"EDIT | Frame {self.current_frame_idx}/{self.n_frames}"
+            fps_str = f"fps={self.fps:.0f}" if self.args.process_fps else ""
+            info = (f"EDIT | Frame {self.current_frame_idx}/{self.n_frames} {ts} {fps_str}"
                     f" | Active: {active_name} | Marked: {len(self.composite_frames)}"
                     f" | BG: {self.background_frame_idx} | [{marked}]"
-                    f" | {alpha_str} {fps_str}")
+                    f" | {alpha_str}")
 
         cv2.putText(canvas, info, (10, 22), cv2.FONT_HERSHEY_SIMPLEX,
                     0.5, (220, 220, 220), 1, cv2.LINE_AA)
@@ -952,9 +999,11 @@ class StroboscopicGUI:
 
     def _render_composite(self) -> np.ndarray:
         bg = read_frame_at_fast(self.cap, self.background_frame_idx, self._frame_cache)
-        canvas = bg.astype(np.float32)
+        canvas = bg.astype(np.float32) * self.background_alpha  # 背景 alpha 控制透明度
 
         for fidx in sorted(self.composite_frames):
+            if fidx in self._excluded_frames:
+                continue
             for obj in self._visible_objects_at(fidx):
                 mask = self.masks.get(fidx, {}).get(obj.obj_id)
                 if mask is None or not mask.any():
@@ -1059,7 +1108,7 @@ class StroboscopicGUI:
 
 
 # ===================================================================
-# Timeline drawer (enhanced: 60px, 3 layers)
+# Timeline drawer (60px, 2 layers: frame状态 + 指示器)
 # ===================================================================
 def _draw_timeline_on_canvas(gui: StroboscopicGUI, canvas: np.ndarray) -> np.ndarray:
     h, w = canvas.shape[:2]
@@ -1068,57 +1117,61 @@ def _draw_timeline_on_canvas(gui: StroboscopicGUI, canvas: np.ndarray) -> np.nda
     out[:h, :] = canvas
     y0 = h
 
-    # ── Layer 1 (top 10px): object visibility range bars ──
-    bar_h = TIMELINE_H // 3 - 1
-    for obj in gui.objects:
-        start = obj.vis_start if obj.vis_start is not None else 0
-        end = obj.vis_end if obj.vis_end is not None else n - 1
-        x1 = int(w * start / max(n, 1))
-        x2 = int(w * (end + 1) / max(n, 1))
-        b, g, r = int(obj.color[0]), int(obj.color[1]), int(obj.color[2])
-        cv2.rectangle(out, (x1, y0 + 1), (x2, y0 + 1 + bar_h), (b, g, r), -1)
-
-    # ── Layer 2 (middle 24px): per-frame status ──
-    mid_y0 = y0 + bar_h + 2
-    mid_h = TIMELINE_H - bar_h - 16
+    # ── 帧状态条 ──
+    bar_h = TIMELINE_H - 16
     for fidx in range(n):
         x_start = int(w * fidx / max(n, 1))
         x_end = int(w * (fidx + 1) / max(n, 1))
         x_end = max(x_end, x_start + 1)
-
         if fidx in gui.composite_frames:
-            color = (0, 200, 80)  # 绿：标记
+            color = (0, 200, 80)    # 绿：标记
         elif fidx in gui.masks and gui.masks[fidx]:
-            color = (60, 60, 60)   # 深灰：有 mask
+            color = (60, 60, 60)    # 深灰：有mask
         else:
-            color = (40, 40, 40)   # 灰：空
-        cv2.rectangle(out, (x_start, mid_y0), (x_end, mid_y0 + mid_h), color, -1)
+            color = (40, 40, 40)    # 灰：空
+        cv2.rectangle(out, (x_start, y0 + 1), (x_end, y0 + 1 + bar_h), color, -1)
 
     # 标记帧的绿色三角
     for fidx in sorted(gui.composite_frames):
         tri_x = int(w * (fidx + 0.5) / max(n, 1))
-        tri_y = mid_y0
+        tri_y = y0 + 1
         pts = np.array([[tri_x - 3, tri_y], [tri_x + 3, tri_y], [tri_x, tri_y + 5]], np.int32)
         cv2.fillPoly(out, [pts], (0, 255, 0))
 
-    # ── Layer 3 (bottom 14px): indicators ──
-    btm_y = mid_y0 + mid_h
-
-    # 背景指示器（橙色）
+    # ── 指示器 ──
     bg_x = int(w * gui.background_frame_idx / max(n, 1))
     cv2.line(out, (bg_x, y0), (bg_x, y0 + TIMELINE_H), (255, 150, 50), 2)
 
-    # 当前位置（白色）
     cur_x = int(w * (gui.current_frame_idx + 0.5) / max(n, 1))
     cv2.line(out, (cur_x, y0), (cur_x, y0 + TIMELINE_H), (255, 255, 255), 2)
 
     # 帧号标签
-    cv2.putText(out, f"F{gui.current_frame_idx}", (cur_x + 4, y0 + TIMELINE_H - 3),
+    label_x = max(cur_x + 4, 26)
+    cv2.putText(out, f"F{gui.current_frame_idx}", (label_x, y0 + TIMELINE_H - 3),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1, cv2.LINE_AA)
 
-    # 标记帧计数
+    # 标记帧计数（右边）
     marked_info = f"Marked: {len(gui.composite_frames)}"
-    cv2.putText(out, marked_info, (5, y0 + TIMELINE_H - 3),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.35, (200, 200, 200), 1, cv2.LINE_AA)
+    (tw, _), _ = cv2.getTextSize(marked_info, cv2.FONT_HERSHEY_SIMPLEX, 0.4, 1)
+    cv2.putText(out, marked_info, (w - tw - 6, y0 + TIMELINE_H - 3),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1, cv2.LINE_AA)
+
+    # ── 播放/暂停按钮（左下角，方形）──
+    bx, by = 2, y0
+    bw, bh = 25, 25
+    cv2.rectangle(out, (bx, by), (bx + bw, by + bh), (60, 60, 60), -1)
+    cv2.rectangle(out, (bx, by), (bx + bw, by + bh), (160, 160, 160), 1)
+    if gui._playing:
+        cv2.rectangle(out, (bx + 7, by + 7), (bx + 11, by + bh - 7), (220, 220, 220), -1)
+        cv2.rectangle(out, (bx + 15, by + 7), (bx + 19, by + bh - 7), (220, 220, 220), -1)
+    else:
+        pts = np.array([[bx + 8, by + 7], [bx + 8, by + bh - 7], [bx + 18, by + bh // 2]], np.int32)
+        cv2.fillPoly(out, [pts], (180, 220, 180))
+    gui._play_btn_rect = (bx, by, bw, bh)
+
+    # 帧号标签（避免与播放按钮重叠）
+    label_x = max(cur_x + 4, 30)
+    cv2.putText(out, f"F{gui.current_frame_idx}", (label_x, y0 + TIMELINE_H - 3),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1, cv2.LINE_AA)
 
     return out

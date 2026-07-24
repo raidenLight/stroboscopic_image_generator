@@ -44,6 +44,7 @@ class TrackObject:
     vis_start: int | None = None
     vis_end: int | None = None
     _dirty: bool = True
+    _saved: bool = False  # 预览成功后标记，用于自动创建下一物体
 
 
 # ---------------------------------------------------------------------------
