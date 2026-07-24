@@ -1003,10 +1003,16 @@ class StroboscopicGUI:
         return result
 
     def _render_composite(self) -> np.ndarray:
-        bg = read_frame_at_fast(self.cap, self.background_frame_idx, self._frame_cache)
-        canvas = bg.astype(np.float32) * self.background_alpha  # 背景 alpha 控制透明度
+        canvas: np.ndarray = np.zeros((self.h, self.w, 3), dtype=np.float32)
+        frames = sorted(self.composite_frames)
+        bg = self.background_frame_idx
 
-        for fidx in sorted(self.composite_frames):
+        # 背景帧：仅当选中的合成帧中包含背景帧且未被排除时作为底色
+        if bg in frames and bg not in self._excluded_frames:
+            bg_frame = read_frame_at_fast(self.cap, bg, self._frame_cache)
+            canvas = bg_frame.astype(np.float32) * self.background_alpha
+
+        for fidx in frames:
             if fidx in self._excluded_frames:
                 continue
             for obj in self._visible_objects_at(fidx):
@@ -1026,21 +1032,6 @@ class StroboscopicGUI:
                 fa = self.get_frame_alpha(fidx)
                 canvas = (canvas * (1.0 - fa * m)
                           + frame.astype(np.float32) * (fa * m))
-
-        # 种子帧 100% 不透明置顶（仅当有合成帧时才渲染）
-        if self.composite_frames:
-            for obj in self.objects:
-                seed_mask = self.masks.get(obj.seed_frame, {}).get(obj.obj_id)
-                if seed_mask is not None and seed_mask.any():
-                    from stroboscopic_image_generator import clean_mask
-                    seed_mask_clean = clean_mask(
-                        mask=seed_mask, min_area=self.args.min_area,
-                        dilate_kernel=self.args.dilate_kernel, seed_xys=obj.points,
-                    )
-                    if seed_mask_clean.any():
-                        seed_frame = read_frame_at_fast(self.cap, obj.seed_frame, self._frame_cache)
-                        m0 = seed_mask_clean.astype(np.float32)[..., None]
-                        canvas = canvas * (1.0 - m0) + seed_frame.astype(np.float32) * m0
 
         return np.clip(canvas, 0, 255).astype(np.uint8)
 
