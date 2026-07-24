@@ -114,7 +114,18 @@ class ControlPanel:
         self.marked_inner = ttk.Frame(self.frm_marked)
         self.marked_inner.pack(fill=tk.BOTH, expand=True)
 
-        # ── 日志栏（可滚动文本框，底部第二行）──
+        # ── 快捷键 + 操作按钮（最底部）──
+        bottom = ttk.Frame(self.root)
+        bottom.pack(fill=tk.X, padx=3, pady=1, side=tk.BOTTOM)
+        ttk.Label(bottom, text="P预览 Enter跟踪 K标记 I间隔 R范围 B背景 V视图 S保存 ←→ Tab Backspace Esc",
+                   font=("", 8)).pack(side=tk.LEFT, anchor=tk.CENTER)
+        self.btn_restart = ttk.Button(bottom, text="↺ 重置全部",
+                                       command=lambda: self.gui.action("restart"))
+        self.btn_restart.pack(side=tk.RIGHT, padx=2)
+        ttk.Button(bottom, text="退出 (Esc)",
+                   command=lambda: self.gui.action("quit")).pack(side=tk.RIGHT, padx=2)
+
+        # ── 日志栏（倒数第二行）──
         log_frame = tk.Frame(self.root, bg="#f0f0e0", relief=tk.SUNKEN, bd=1)
         log_frame.pack(fill=tk.X, padx=3, pady=(1, 0), side=tk.BOTTOM)
         self._log_text = tk.Text(log_frame, height=5, font=("微软雅黑", 8), fg="#444444",
@@ -124,17 +135,6 @@ class ControlPanel:
         self._log_text.configure(yscrollcommand=log_sb.set)
         self._log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         log_sb.pack(side=tk.RIGHT, fill=tk.Y)
-
-        # ── 底部（固定）──
-        bottom = ttk.Frame(self.root)
-        bottom.pack(fill=tk.X, padx=3, pady=1, side=tk.BOTTOM)
-        ttk.Label(bottom, text="P预览 Enter跟踪 K标记 I间隔 R范围 B背景 V视图 S保存 ←→导航 Tab切物体 Backspace删点 Esc退出",
-                   font=("", 7)).pack(side=tk.LEFT, anchor=tk.S)
-        self.btn_restart = ttk.Button(bottom, text="↺ 重置全部",
-                                       command=lambda: self.gui.action("restart"))
-        self.btn_restart.pack(side=tk.RIGHT, padx=2)
-        ttk.Button(bottom, text="退出 (Esc)",
-                   command=lambda: self.gui.action("quit")).pack(side=tk.RIGHT, padx=2)
 
     # ==================================================================
     # 动态控件（每次 rebuild 重建）
