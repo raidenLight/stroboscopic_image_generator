@@ -964,15 +964,15 @@ class StroboscopicGUI:
         active_name = active.name if active else "—"
 
         t_sec = self.current_frame_idx / max(self.fps, 1)
-        ts = f"{int(t_sec // 60)}:{int(t_sec % 60):02d}"
+        ts = f"{int(t_sec // 60)} min {t_sec % 60:.2f} s"
         if self.state == GUIState.TRACKING:
             n_masks = sum(len(m) for m in self.masks.values())
-            info = (f"TRACKING | Frame {self.current_frame_idx}/{self.n_frames} {ts}s"
+            info = (f"TRACKING | Frame {self.current_frame_idx}/{self.n_frames} {ts}"
                     f" | Objs: {n_objs} | Masks: {n_masks}")
         else:
             marked = "K" if self.current_frame_idx in self.composite_frames else "-"
             alpha_str = f"alpha={self.get_frame_alpha(self.current_frame_idx):.2f}"
-            info = (f"EDIT | Frame {self.current_frame_idx}/{self.n_frames} {ts}s"
+            info = (f"EDIT | Frame {self.current_frame_idx}/{self.n_frames} {ts}"
                     f" | Active: {active_name} | Marked: {len(self.composite_frames)}"
                     f" | BG: {self.background_frame_idx} | [{marked}]"
                     f" | {alpha_str}")
