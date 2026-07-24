@@ -721,7 +721,7 @@ class StroboscopicGUI:
 
         self._tracked_obj_ids = {o.obj_id for o in all_with_points}
         self._tracking_pass = 0
-        self._tracking_total_frames = self.n_frames * 2
+        self._tracking_total_frames = self.n_frames  # forward+backward 各覆盖一半，总计约 n 帧
         self._tracking_frame_count = 0
         min_seed = min(o.seed_frame for o in all_with_points)
 
