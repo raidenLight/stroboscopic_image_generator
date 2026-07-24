@@ -220,21 +220,41 @@ class ControlPanel:
 
     # ── Alpha ──
     def _build_alpha_section(self) -> None:
-        # ★ 重建时同步 StringVar 到 model
         self._alpha_start_str.set(f"{self.gui.alpha_start:.2f}")
         self._alpha_end_str.set(f"{self.gui.alpha_end:.2f}")
-        r = ttk.Frame(self.alpha_inner)
-        r.pack(fill=tk.X)
-        ttk.Label(r, text="首帧 α:").pack(side=tk.LEFT)
-        e1 = ttk.Entry(r, textvariable=self._alpha_start_str, width=5)
+        self._bg_alpha_str = tk.StringVar(value=f"{self.gui.background_alpha:.2f}")
+
+        # 首帧+末帧渐变
+        r1 = ttk.Frame(self.alpha_inner)
+        r1.pack(fill=tk.X)
+        ttk.Label(r1, text="首帧:").pack(side=tk.LEFT)
+        e1 = ttk.Entry(r1, textvariable=self._alpha_start_str, width=5)
         e1.pack(side=tk.LEFT, padx=2)
         e1.bind("<Return>", lambda e: self._apply_alpha_gradient())
-        ttk.Label(r, text="末帧 α:").pack(side=tk.LEFT, padx=(4, 0))
-        e2 = ttk.Entry(r, textvariable=self._alpha_end_str, width=5)
+        ttk.Label(r1, text="末帧:").pack(side=tk.LEFT, padx=(4, 0))
+        e2 = ttk.Entry(r1, textvariable=self._alpha_end_str, width=5)
         e2.pack(side=tk.LEFT, padx=2)
         e2.bind("<Return>", lambda e: self._apply_alpha_gradient())
-        ttk.Button(r, text="✓ 应用渐变", command=self._apply_alpha_gradient).pack(side=tk.LEFT, padx=4)
-        ttk.Button(r, text="↩ 清除逐帧α", command=lambda: self.gui.action("reset_per_frame_alphas")).pack(side=tk.RIGHT)
+        ttk.Button(r1, text="✓ 应用", command=self._apply_alpha_gradient).pack(side=tk.LEFT, padx=4)
+        ttk.Button(r1, text="↩ 清除逐帧", command=lambda: self.gui.action("reset_per_frame_alphas")).pack(side=tk.RIGHT)
+
+        # 背景 alpha（独立，不计入渐变）
+        r2 = ttk.Frame(self.alpha_inner)
+        r2.pack(fill=tk.X, pady=(2, 0))
+        ttk.Label(r2, text="背景 α:").pack(side=tk.LEFT)
+        e_bg = ttk.Entry(r2, textvariable=self._bg_alpha_str, width=5)
+        e_bg.pack(side=tk.LEFT, padx=2)
+        e_bg.bind("<Return>", lambda e: self._apply_bg_alpha())
+        ttk.Button(r2, text="✓", width=3, command=self._apply_bg_alpha).pack(side=tk.LEFT, padx=2)
+
+    def _apply_bg_alpha(self):
+        try:
+            v = float(self._bg_alpha_str.get())
+            if 0.0 <= v <= 1.0:
+                self.gui.action("set_bg_alpha", v)
+                self.log(f"背景 alpha={v:.2f}")
+        except ValueError:
+            pass
 
     def _apply_alpha_gradient(self):
         """应用首/末帧 alpha 渐变设置。"""

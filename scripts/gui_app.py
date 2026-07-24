@@ -99,6 +99,7 @@ class StroboscopicGUI:
         # ── Alpha：渐变 + 逐帧覆盖 ──
         self.alpha_start: float = 1.0
         self.alpha_end: float = 1.0
+        self.background_alpha: float = 1.0
         self.per_frame_alpha: dict[int, float] = {}
 
         # ── 选点模式 ──
@@ -304,6 +305,12 @@ class StroboscopicGUI:
                 self.alpha_end = val
                 self._preview_dirty = True
 
+        elif name == "set_bg_alpha":
+            val = args[0] if args else None
+            if val is not None and 0.0 <= val <= 1.0:
+                self.background_alpha = val
+                self._preview_dirty = True
+
         elif name == "reset_per_frame_alphas":
             self.per_frame_alpha.clear()
             self._preview_dirty = True
@@ -406,6 +413,7 @@ class StroboscopicGUI:
             self.per_frame_alpha.clear()
             self.alpha_start = 1.0
             self.alpha_end = 1.0
+            self.background_alpha = 1.0
             self.state = GUIState.EDIT
             self._set_status("已重新开始。", "info")
 
@@ -969,7 +977,7 @@ class StroboscopicGUI:
 
     def _render_composite(self) -> np.ndarray:
         bg = read_frame_at_fast(self.cap, self.background_frame_idx, self._frame_cache)
-        canvas = bg.astype(np.float32)
+        canvas = bg.astype(np.float32) * self.background_alpha  # 背景 alpha 控制透明度
 
         for fidx in sorted(self.composite_frames):
             if fidx in self._excluded_frames:
