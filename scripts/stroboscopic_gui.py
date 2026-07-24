@@ -28,6 +28,10 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+# 禁用 tqdm 后台监控线程，避免与 cv2 的 GIL 释放冲突导致 PyEval_RestoreThread 崩溃
+import tqdm
+tqdm.tqdm.monitor_interval = 0
+
 # ── 复用原始脚本的 SAM2 辅助函数 ──
 _THIS_DIR = Path(__file__).resolve().parent
 if str(_THIS_DIR) not in sys.path:

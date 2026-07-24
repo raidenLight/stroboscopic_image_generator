@@ -447,12 +447,17 @@ class StroboscopicGUI:
     # Main loop
     # ==================================================================
     def run(self) -> None:
-        cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
-        cv2.setMouseCallback(WINDOW_NAME, self._on_mouse)
-
+        # 先创建 tkinter 面板，再创建 OpenCV 窗口（避免消息泵干扰导致面板闪回原位）
         from gui_panel import ControlPanel
         self.panel = ControlPanel(self)
         self._quit_flag = False
+
+        cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
+        cv2.setMouseCallback(WINDOW_NAME, self._on_mouse)
+        cv2.waitKey(1)  # 预热 OpenCV Windows 消息泵
+
+        self.panel.root.update_idletasks()
+        self.panel.root.update()
 
         def tick() -> None:
             if self._quit_flag:
@@ -482,8 +487,8 @@ class StroboscopicGUI:
                 self._preview_dirty = True
                 self._preview_mask = None
 
-            # 键盘输入
-            key_raw = cv2.waitKeyEx(1)  # 比pollKey更可靠，1ms不阻塞
+            # 键盘输入（pollKey 非阻塞，不释放 GIL，避免与 tqdm 线程冲突）
+            key_raw = cv2.pollKey()
             if key_raw >= 0:
                 key = key_raw & 0xFF
                 self._handle_keyboard(key, key_raw)
@@ -510,7 +515,7 @@ class StroboscopicGUI:
             if not self._quit_flag:
                 self.panel.root.after(33, tick)
 
-        self.panel.root.after(100, tick)
+        self.panel.root.after(200, tick)  # 延迟启动，给窗口管理器充足初始化时间
         self.panel.root.mainloop()
         cv2.destroyAllWindows()
 
