@@ -170,7 +170,7 @@ class ControlPanel:
         r.pack(fill=tk.X)
         ttk.Button(r, text="+ 新建 (N)", command=lambda: self.gui.action("new_object")).pack(
             side=tk.LEFT, padx=1, fill=tk.X, expand=True)
-        ttk.Button(r, text="👁 预览 (P)", command=lambda: self.gui.action("preview_frame")).pack(
+        ttk.Button(r, text="👁 保存并预览 (P)", command=lambda: self.gui.action("preview_frame")).pack(
             side=tk.LEFT, padx=1, fill=tk.X, expand=True)
 
         dirty = [o for o in self.gui.objects if o._dirty and o.points]
