@@ -175,13 +175,15 @@ class ControlPanel:
 
         dirty = [o for o in self.gui.objects if o._dirty and o.points]
         if dirty:
-            btn = tk.Button(r, text=f"▶ 跟踪({len(dirty)})", bg="#4CAF50",
-                            fg="white", font=("", 9, "bold"), relief=tk.RAISED,
-                            command=lambda: self.gui.action("start_tracking"))
+            s = ttk.Style()
+            s.configure("Green.TButton", background="#4CAF50", foreground="white",
+                        font=("", 9, "bold"))
+            btn = ttk.Button(r, text=f"▶ 跟踪({len(dirty)})", style="Green.TButton",
+                             command=lambda: self.gui.action("start_tracking"))
         else:
-            btn = tk.Button(r, text="▶ 跟踪", bg="#cccccc", fg="#888888",
-                            font=("", 9), relief=tk.FLAT, state=tk.DISABLED)
-        btn.pack(side=tk.LEFT, padx=1, fill=tk.X, expand=True, ipady=2)
+            btn = ttk.Button(r, text="▶ 跟踪")
+            btn.configure(state=tk.DISABLED)
+        btn.pack(side=tk.LEFT, padx=1, fill=tk.X, expand=True)
         self._pt_btn = ttk.Button(r, command=lambda: self.gui.action("toggle_point_mode"))
         self._pt_btn.pack(side=tk.LEFT, padx=1, fill=tk.X, expand=True)
 
