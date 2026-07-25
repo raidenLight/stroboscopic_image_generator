@@ -54,6 +54,7 @@ uv run python scripts/stroboscopic_gui.py --video <你的视频路径>
 | `--hf-model-id` | `facebook/sam2.1-hiera-small` | HuggingFace 模型 |
 | `--offload-video-to-cpu` | `False` | 视频帧放 CPU 内存 |
 | `--offload-state-to-cpu` | `False` | 预测器状态放 CPU 内存 |
+| `--bg-align` | `True` | 背景帧间 ECC 对齐（去抖动） |
 
 ### 键盘快捷键
 
@@ -65,7 +66,6 @@ uv run python scripts/stroboscopic_gui.py --video <你的视频路径>
 | `P` | 保存并预览 |
 | `Enter` | 开始跟踪 |
 | `K` / `I` / `R` | 标记帧 / 间隔选取 / 范围选取 |
-| `B` | 设背景帧（自动加入合成帧） |
 | `V` | 切换视图 (Mask/合成/原图) |
 | `S` | 保存合成图 |
 | `1`~`9` / `Tab` | 切换活跃物体 |
@@ -79,13 +79,22 @@ uv run python scripts/stroboscopic_gui.py --video <你的视频路径>
 | 物体 | 物体按钮 + 删除（彩色标识） |
 | 操作 | 保存并预览 / 跟踪(双向/单向切换) / 选点模式 |
 | 视图 | Mask/合成/原图切换、mask阈值、💾保存 |
-| 帧选取 | K标记、B背景、R范围、清除、间隔选取 |
+| 帧选取 | K标记、R范围、清除、间隔选取 |
 | Alpha | 首/末帧渐变、背景alpha、清除逐帧 |
-| 合成帧表格 | 行选框(排除帧)、帧/时间、逐物体☑/☐、alpha、删除 |
+| 合成帧表格 | 行选框(排除帧)、帧/时间、逐物体☑/☐、☑BG、alpha、删除 |
 | 日志 | 操作日志、错误提示 |
 | 快捷键栏 | 常用快捷键速查 + 重置按钮 |
 
 所有按钮和键盘**双向同步**。
+
+### 多帧背景融合
+
+勾选多帧的 `☑BG` 列，自动融合为干净背景：
+
+1. 标记若干帧 → 在帧列表中勾选它们的 `BG` 列
+2. 各帧的非物体区域互补，逐像素择优填充
+3. 相机轻微抖动时自动 ECC 对齐（`--no-bg-align` 可关闭）
+4. 背景融合结果缓存，仅 BG 勾选变化时重算
 
 ### 内存管理
 
