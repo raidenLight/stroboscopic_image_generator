@@ -45,13 +45,15 @@ uv run python scripts/stroboscopic_gui.py --video <你的视频路径>
 |------|--------|------|
 | `--video` | `video/exp1_dwvp.MP4` | 输入视频路径 |
 | `--process-fps` | `10` | 处理帧率，降低可减少内存 |
-| `--alpha` | `0.60` | 合成透明度 (0.0~1.0) |
-| `--mask-threshold` | `0.2` | mask 阈值，越高越紧 |
+| `--alpha` | `0.80` | 合成透明度 (0.0~1.0) |
+| `--mask-threshold` | `0.5` | mask 阈值，越高越紧 |
 | `--dilate-kernel` | `5` | mask 膨胀核 (0=不膨胀) |
 | `--min-area` | `300` | 最小连通区域面积 |
-| `--max-dim` | `1280` | 视频长边最大尺寸 |
+| `--max-dim` | `1280` | 视频长边最大尺寸，`-1` 不缩放 |
 | `--device` | `auto` | `auto`/`cuda`/`cpu`/`mps` |
 | `--hf-model-id` | `facebook/sam2.1-hiera-small` | HuggingFace 模型 |
+| `--offload-video-to-cpu` | `False` | 视频帧放 CPU 内存 |
+| `--offload-state-to-cpu` | `False` | 预测器状态放 CPU 内存 |
 
 ### 键盘快捷键
 
@@ -75,7 +77,7 @@ uv run python scripts/stroboscopic_gui.py --video <你的视频路径>
 |------|------|
 | 状态栏 | 当前状态、帧号、活跃物体 |
 | 物体 | 物体按钮 + 删除（彩色标识） |
-| 操作 | 保存并预览 / 跟踪 / 选点模式切换 |
+| 操作 | 保存并预览 / 跟踪(双向/单向切换) / 选点模式 |
 | 视图 | Mask/合成/原图切换、mask阈值、💾保存 |
 | 帧选取 | K标记、B背景、R范围、清除、间隔选取 |
 | Alpha | 首/末帧渐变、背景alpha、清除逐帧 |
@@ -87,9 +89,11 @@ uv run python scripts/stroboscopic_gui.py --video <你的视频路径>
 
 ### 内存管理
 
-- `--process-fps 3` 或 `--max-dim 640` 可大幅降低内存
+- `--process-fps 3` 可大幅降低内存（减少处理帧数）
+- `--max-dim 640` 降低帧缓存和 mask 存储占用的内存
+- `--offload-video-to-cpu` 将视频帧放 CPU（省 GPU 显存）
+- 跟踪完成后自动释放 memory bank 回收显存
 - 预览/跟踪 OOM 时降低参数重试
-- 中止跟踪后帧缓存保留，重新跟踪无需重载
 
 ## 模型
 

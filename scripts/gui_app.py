@@ -1107,17 +1107,26 @@ class StroboscopicGUI:
 
     # ── Alpha 系统 ──
     def get_frame_alpha(self, frame_idx: int) -> float:
-        """返回指定帧的 alpha 值（逐帧覆盖 > 渐变插值）"""
+        """返回指定帧的 alpha 值（逐帧覆盖 > 渐变插值）
+
+        渐变仅在已勾选的合成帧之间按位置均匀分配，忽略被排除的帧。
+        """
         if frame_idx in self.per_frame_alpha:
             return self.per_frame_alpha[frame_idx]
-        frames = sorted(self.composite_frames)
-        if not frames or len(frames) == 1:
+        active = sorted(f for f in self.composite_frames
+                        if f not in self._excluded_frames and f != self.background_frame_idx)
+        if not active or len(active) == 1:
             return self.alpha_start
-        if frame_idx <= frames[0]:
+        try:
+            pos = active.index(frame_idx)
+        except ValueError:
+            # 不在合成帧列表中（理论上不会走这里，但防御一下）
             return self.alpha_start
-        if frame_idx >= frames[-1]:
+        if pos == 0:
+            return self.alpha_start
+        if pos == len(active) - 1:
             return self.alpha_end
-        t = (frame_idx - frames[0]) / (frames[-1] - frames[0])
+        t = pos / (len(active) - 1)
         return self.alpha_start + t * (self.alpha_end - self.alpha_start)
 
     def close(self) -> None:

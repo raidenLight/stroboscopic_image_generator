@@ -79,7 +79,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--offload-state-to-cpu", action=argparse.BooleanOptionalAction, default=False,
                         help="将预测器状态放在 CPU 内存")
     parser.add_argument("--max-dim", type=int, default=1280,
-                        help="帧最大尺寸（像素）。越小越省显存。默认 1280。")
+                        help="帧最大尺寸（像素）。默认 1280。传 -1 表示不缩放。")
 
     args = parser.parse_args()
     if not 0.0 <= args.alpha <= 1.0:
@@ -97,7 +97,10 @@ def parse_args() -> argparse.Namespace:
 # Video resize helper
 # ===================================================================
 def maybe_resize_video(src_video: Path, max_dim: int, tmp_dir: Path) -> tuple[Path, int, int]:
-    """缩放视频使长边 ≤ max_dim，保持宽高比。返回 (新路径, w, h)。"""
+    """缩放视频使长边 ≤ max_dim，保持宽高比。返回 (新路径, w, h)。
+
+    max_dim ≤ 0 时不缩放，直接返回原视频路径和尺寸。
+    """
     cap = cv2.VideoCapture(str(src_video))
     if not cap.isOpened():
         raise RuntimeError(f"无法打开视频: {src_video}")
@@ -107,7 +110,7 @@ def maybe_resize_video(src_video: Path, max_dim: int, tmp_dir: Path) -> tuple[Pa
     src_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     long_side = max(src_w, src_h)
 
-    if long_side <= max_dim:
+    if max_dim <= 0 or long_side <= max_dim:
         cap.release()
         return src_video, src_w, src_h
 
