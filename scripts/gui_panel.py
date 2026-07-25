@@ -224,7 +224,6 @@ class ControlPanel:
         row1.pack(fill=tk.X, pady=1)
         self._mark_btn = ttk.Button(row1, text="K 标记", command=lambda: self.gui.action("mark_frame"))
         self._mark_btn.pack(side=tk.LEFT, padx=1, fill=tk.X, expand=True)
-        ttk.Button(row1, text="B 背景", command=lambda: self.gui.action("set_bg")).pack(side=tk.LEFT, padx=1, fill=tk.X, expand=True)
         self._range_btn = ttk.Button(row1, text="R 范围", command=lambda: self.gui.action("range_select"))
         self._range_btn.pack(side=tk.LEFT, padx=1, fill=tk.X, expand=True)
         ttk.Button(row1, text="清除标记", command=lambda: self.gui.action("clear_all_marked")).pack(side=tk.LEFT, padx=1, fill=tk.X, expand=True)
@@ -334,35 +333,35 @@ class ControlPanel:
         n_objs = len(objs)
 
         # 所有行：标记帧 + 背景帧
-        all_rows = list(frames)
-        bg = self.gui.background_frame_idx
-        if bg not in all_rows:
-            all_rows.append(bg)
-        all_rows.sort()
+        all_rows = set(frames)
+        all_rows.update(self.gui.background_frames)
+        all_rows = sorted(all_rows)
 
         if not all_rows:
             ttk.Label(self.marked_inner, text="（暂无标记帧，按 K 标记）", foreground="gray").pack()
             return
 
         # ── 列定义: [行选] [帧标签] [obj1] [obj2]... [α] [✕] ──
-        columns = ["row"] + ["frame"] + [f"obj_{o.obj_id}" for o in objs] + ["alpha", "del"]
+        columns = ["row"] + ["frame"] + [f"obj_{o.obj_id}" for o in objs] + ["BG", "alpha", "del"]
         tree = ttk.Treeview(self.marked_inner, columns=columns, show="headings",
                             selectmode="browse", height=6)
 
-        # Col 0: 行选框
+        # Col 0: 行选框（不伸缩，尽量窄）
         tree.heading("row", text="")
-        tree.column("row", width=20, anchor=tk.CENTER, stretch=True, minwidth=18)
+        tree.column("row", width=18, anchor=tk.CENTER, stretch=False, minwidth=16)
         tree.heading("frame", text=f"帧 / 时间 ({len(frames)})")
         tree.column("frame", width=100, anchor=tk.W, stretch=True, minwidth=60)
         for obj in objs:
             col = f"obj_{obj.obj_id}"
             tree.heading(col, text=f"☑ {obj.name}",
                          command=lambda oid=obj.obj_id: self._col_toggle_all(tree, oid))
-            tree.column(col, width=46, anchor=tk.CENTER, stretch=True, minwidth=36)
+            tree.column(col, width=56, anchor=tk.CENTER, stretch=False, minwidth=50)
+        tree.heading("BG", text="☑BG")
+        tree.column("BG", width=44, anchor=tk.CENTER, stretch=False, minwidth=40)
         tree.heading("alpha", text="α")
-        tree.column("alpha", width=46, anchor=tk.CENTER, stretch=True, minwidth=38)
+        tree.column("alpha", width=40, anchor=tk.CENTER, stretch=False, minwidth=32)
         tree.heading("del", text="")
-        tree.column("del", width=26, anchor=tk.CENTER, stretch=True, minwidth=22)
+        tree.column("del", width=20, anchor=tk.CENTER, stretch=False, minwidth=18)
 
         # Scrollbar
         sb = ttk.Scrollbar(self.marked_inner, orient=tk.VERTICAL, command=tree.yview)
@@ -375,9 +374,9 @@ class ControlPanel:
         for fidx in all_rows:
             t_sec = fidx / fps
             ts = f"{int(t_sec // 60)}min {t_sec % 60:.2f}s"
-            is_bg = (fidx == bg)
+            is_bg = fidx in self.gui.background_frames
             is_excluded = fidx in self.gui._excluded_frames
-            label = f"帧{fidx} {ts}" + (" [BG]" if is_bg else "") + (" [排除]" if is_excluded else "")
+            label = f"帧{fidx} {ts}" + (" [排除]" if is_excluded else "")
 
             # 行选 ☑/☐
             row_val = "☐" if is_excluded else "☑"
@@ -387,6 +386,8 @@ class ControlPanel:
                 override = self.gui.frame_overrides.get(fidx, {}).get(obj.obj_id)
                 checked = override if override is not None else True
                 values.append("☑" if (has_mask and checked) else ("☐" if has_mask else "—"))
+            # BG 列
+            values.append("☑" if is_bg else "☐")
             cur_a = self.gui.get_frame_alpha(fidx)
             values.append(f"{cur_a:.2f}")
             values.append("✕")
@@ -438,9 +439,15 @@ class ControlPanel:
                 vals[col_idx] = "☑" if (has_mask and checked) else ("☐" if has_mask else "—")
                 tree.item(item, values=vals)
             elif col_idx == n_objs + 2:
+                # ★ BG 列：toggle 背景参与
+                self.gui.action("toggle_background_at", fidx)
+                vals = list(tree.item(item, "values"))
+                vals[col_idx] = "☐" if vals[col_idx] == "☑" else "☑"
+                tree.item(item, values=vals)
+            elif col_idx == n_objs + 3:
                 # Alpha 列：弹出编辑
                 self._popup_alpha_editor(tree, item, fidx, col_idx)
-            elif col_idx == n_objs + 3:
+            elif col_idx == n_objs + 4:
                 # 删除
                 self.gui.composite_frames.discard(fidx)
                 self.gui._data_version += 1
@@ -689,7 +696,6 @@ class ControlPanel:
                 gui.current_frame_idx = (gui.current_frame_idx + (-1 if key == "Left" else 1)) % gui.n_frames
                 gui._preview_dirty = True
         elif char.lower() == "k": gui.action("mark_frame")
-        elif char.lower() == "b": gui.action("set_bg")
         elif char.lower() == "v":
             cycle = {"mask": "composite", "composite": "original", "original": "mask"}
             gui.action("view_" + cycle[gui.viz_mode])

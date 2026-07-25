@@ -80,6 +80,8 @@ def parse_args() -> argparse.Namespace:
                         help="将预测器状态放在 CPU 内存")
     parser.add_argument("--max-dim", type=int, default=1280,
                         help="帧最大尺寸（像素）。默认 1280。传 -1 表示不缩放。")
+    parser.add_argument("--bg-align", action=argparse.BooleanOptionalAction, default=True,
+                        help="背景帧之间做图像对齐以消除相机抖动")
 
     args = parser.parse_args()
     if not 0.0 <= args.alpha <= 1.0:

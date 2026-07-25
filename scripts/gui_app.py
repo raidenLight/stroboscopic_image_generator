@@ -87,7 +87,10 @@ class StroboscopicGUI:
         self.state = GUIState.EDIT
         self.current_frame_idx: int = 0
         self.composite_frames: set[int] = set()
-        self.background_frame_idx: int = 0
+        self.background_frames: set[int] = set()  # 勾选了 BG 列的帧
+        self.bg_align: bool = getattr(args, "bg_align", True)
+        self._bg_merge_cache: np.ndarray | None = None
+        self._bg_merge_dirty: bool = True
         self._range_start: int | None = None
         self.viz_mode = "mask"
         self._preview_dirty = True
@@ -273,6 +276,8 @@ class StroboscopicGUI:
             self.composite_frames.clear()
             self.frame_overrides.clear()
             self._excluded_frames.clear()
+            self.background_frames.clear()
+            self._bg_merge_dirty = True
             self._data_version += 1
             self._preview_dirty = True
             self._set_status("已清除所有标记帧。", "info")
@@ -357,12 +362,15 @@ class StroboscopicGUI:
                 self._data_version += 1
                 self._preview_dirty = True
 
-        elif name == "set_bg":
-            self.background_frame_idx = self.current_frame_idx
-            self.composite_frames.add(self.current_frame_idx)
+        elif name == "toggle_background_at":
+            fidx = args[0] if args else self.current_frame_idx
+            if fidx in self.background_frames:
+                self.background_frames.discard(fidx)
+            else:
+                self.background_frames.add(fidx)
+            self._bg_merge_dirty = True
             self._data_version += 1
             self._preview_dirty = True
-            self._set_status(f"背景设为第 {self.current_frame_idx} 帧（已自动标记）", "info")
 
         elif name in ("view_mask", "view_composite", "view_original"):
             self.viz_mode = name.split("_")[1]
@@ -411,7 +419,8 @@ class StroboscopicGUI:
             self.frame_overrides.clear()
             self._excluded_frames.clear()
             self._data_version += 1
-            self.background_frame_idx = 0
+            self.background_frames.clear()
+            self._bg_merge_dirty = True
             self._range_start = None
             self._preview_dirty = True
             self._preview_cache = None
@@ -989,7 +998,7 @@ class StroboscopicGUI:
             fps_str = f"fps={self.fps:.0f}" if self.args.process_fps else ""
             info = (f"EDIT | Frame {self.current_frame_idx}/{self.n_frames} {ts} {fps_str}"
                     f" | Active: {active_name} | Marked: {len(self.composite_frames)}"
-                    f" | BG: {self.background_frame_idx} | [{marked}]"
+                    f" | BG: {len(self.background_frames)} | [{marked}]"
                     f" | {alpha_str}")
 
         cv2.putText(canvas, info, (10, 22), cv2.FONT_HERSHEY_SIMPLEX,
@@ -1011,15 +1020,104 @@ class StroboscopicGUI:
                 result.append(obj)
         return result
 
-    def _render_composite(self) -> np.ndarray:
-        canvas: np.ndarray = np.zeros((self.h, self.w, 3), dtype=np.float32)
-        frames = sorted(self.composite_frames)
-        bg = self.background_frame_idx
+    def _render_background_merge(self) -> np.ndarray:
+        """融合所有勾选了 BG 的帧，取各帧非物体区域互补为干净背景。
 
-        # 背景帧：仅当选中的合成帧中包含背景帧且未被排除时作为底色
-        if bg in frames and bg not in self._excluded_frames:
-            bg_frame = read_frame_at_fast(self.cap, bg, self._frame_cache)
-            canvas = bg_frame.astype(np.float32) * self.background_alpha
+        0 帧背景 → 黑底；1 帧背景 → 直接返回（零开销）。
+        结果会被缓存，仅当 bg 相关状态变化时才重新计算。
+        """
+        if not self._bg_merge_dirty and self._bg_merge_cache is not None:
+            return self._bg_merge_cache.copy()
+
+        bg_list = sorted(f for f in self.composite_frames
+                         if f not in self._excluded_frames and f in self.background_frames)
+
+        if not bg_list:
+            self._bg_merge_cache = np.zeros((self.h, self.w, 3), dtype=np.uint8)
+            self._bg_merge_dirty = False
+            return self._bg_merge_cache.copy()
+
+        if len(bg_list) == 1 and not self.bg_align:
+            result = read_frame_at_fast(self.cap, bg_list[0], self._frame_cache)
+            self._bg_merge_cache = result
+            self._bg_merge_dirty = False
+            return result.copy()
+
+        # 加载各帧 + 计算 union mask（所有可见物体的合并遮挡区域）
+        bg_data: list[tuple[int, np.ndarray, np.ndarray, float]] = []
+        for fidx in bg_list:
+            frame = read_frame_at_fast(self.cap, fidx, self._frame_cache)
+            obj_masks = self.masks.get(fidx, {})
+            union_mask = np.zeros((self.h, self.w), dtype=bool)
+            n_objs = 0
+            for obj in self.objects:
+                mask = obj_masks.get(obj.obj_id)
+                if mask is not None and mask.any():
+                    union_mask = union_mask | mask
+                    n_objs += 1
+            coverage = union_mask.sum() / max(union_mask.size, 1)
+            bg_data.append((fidx, frame, union_mask, coverage))
+
+        if not bg_data:
+            return np.zeros((self.h, self.w, 3), dtype=np.uint8)
+
+        # ECC 对齐：以帧数最少（最干净）的帧为参考，其他帧做单应性变换
+        ref_idx = min(bg_data, key=lambda x: x[3])[0]
+        ref_frame = read_frame_at_fast(self.cap, ref_idx, self._frame_cache)
+        ref_gray = cv2.cvtColor(ref_frame, cv2.COLOR_BGR2GRAY)
+        aligned_data: list[tuple[np.ndarray, np.ndarray, float]] = []
+        for fidx, frame, union_mask, coverage in bg_data:
+            if fidx == ref_idx or not self.bg_align:
+                aligned_data.append((frame, union_mask, coverage))
+                continue
+            src_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            warp_matrix = np.eye(3, 3, dtype=np.float32)
+            criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 100, 1e-6)
+            try:
+                _, warp_matrix = cv2.findTransformECC(
+                    ref_gray, src_gray, warp_matrix, cv2.MOTION_HOMOGRAPHY, criteria)
+                aligned_frame = cv2.warpPerspective(frame, warp_matrix, (self.w, self.h))
+                aligned_mask = cv2.warpPerspective(
+                    union_mask.astype(np.uint8), warp_matrix, (self.w, self.h)).astype(bool)
+                aligned_data.append((aligned_frame, aligned_mask, coverage))
+            except cv2.error:
+                aligned_data.append((frame, union_mask, coverage))
+
+        # 按干净度升序（最干净的优先作为填充源）
+        aligned_data.sort(key=lambda x: x[2])
+
+        # 逐像素择优填充
+        result = np.zeros((self.h, self.w, 3), dtype=np.uint8)
+        filled = np.zeros((self.h, self.w), dtype=bool)
+        for frame, union_mask, _coverage in aligned_data:
+            clean = ~union_mask & ~filled
+            if clean.any():
+                result[clean] = frame[clean]
+                filled |= clean
+            if filled.all():
+                break
+
+        # fallback + 残影告警
+        if not filled.all():
+            first_frame = aligned_data[0][0]
+            result[~filled] = first_frame[~filled]
+            uncleaned = 1.0 - filled.sum() / filled.size
+            if uncleaned >= 0.02:
+                self._set_status(
+                    f"背景融合: {uncleaned*100:.1f}% 像素无法清理，建议添加更多背景帧", "warn")
+            elif uncleaned >= 0.005:
+                print(f"[WARN] 背景融合: {uncleaned*100:.1f}%({int(uncleaned*filled.size)}px) 无法清理")
+
+        self._bg_merge_cache = result
+        self._bg_merge_dirty = False
+        return result.copy()
+
+    def _render_composite(self) -> np.ndarray:
+        frames = sorted(self.composite_frames)
+
+        # 多帧背景融合作为基底
+        bg_canvas = self._render_background_merge()
+        canvas = bg_canvas.astype(np.float32) * self.background_alpha
 
         from stroboscopic_image_generator import clean_mask
 
@@ -1114,7 +1212,7 @@ class StroboscopicGUI:
         if frame_idx in self.per_frame_alpha:
             return self.per_frame_alpha[frame_idx]
         active = sorted(f for f in self.composite_frames
-                        if f not in self._excluded_frames and f != self.background_frame_idx)
+                        if f not in self._excluded_frames and f not in self.background_frames)
         if not active or len(active) == 1:
             return self.alpha_start
         try:
@@ -1167,9 +1265,10 @@ def _draw_timeline_on_canvas(gui: StroboscopicGUI, canvas: np.ndarray) -> np.nda
         pts = np.array([[tri_x - 3, tri_y], [tri_x + 3, tri_y], [tri_x, tri_y + 5]], np.int32)
         cv2.fillPoly(out, [pts], (0, 255, 0))
 
-    # ── 指示器 ──
-    bg_x = int(w * gui.background_frame_idx / max(n, 1))
-    cv2.line(out, (bg_x, y0), (bg_x, y0 + TIMELINE_H), (255, 150, 50), 2)
+    # ── 背景帧指示器 ──
+    for bg_idx in sorted(gui.background_frames):
+        bg_x = int(w * bg_idx / max(n, 1))
+        cv2.line(out, (bg_x, y0), (bg_x, y0 + TIMELINE_H), (255, 150, 50), 1)
 
     cur_x = int(w * (gui.current_frame_idx + 0.5) / max(n, 1))
     cv2.line(out, (cur_x, y0), (cur_x, y0 + TIMELINE_H), (255, 255, 255), 2)
