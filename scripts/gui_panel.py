@@ -37,6 +37,7 @@ class ControlPanel:
         self._last_obj_count: int = -1
         self._last_marked_count: int = -1
         self._last_data_version: int = -1
+        self._last_bidirectional: bool = True
         self._interval_str = tk.StringVar(value="1.5")
         self._range_start_str = tk.StringVar(value="0")
         self._range_end_str = tk.StringVar(value=str(max(gui.n_frames - 1, 0)))
@@ -184,6 +185,11 @@ class ControlPanel:
             btn = ttk.Button(r, text="▶ 跟踪")
             btn.configure(state=tk.DISABLED)
         btn.pack(side=tk.LEFT, padx=1, fill=tk.X, expand=True)
+        # 跟踪方向切换：⇄ 双向 / → 单向
+        direction_label = "⇄ 双向" if self.gui.tracking_bidirectional else "→ 单向"
+        self._dir_btn = ttk.Button(r, text=direction_label, width=7,
+                                   command=lambda: self.gui.action("toggle_tracking_direction"))
+        self._dir_btn.pack(side=tk.LEFT, padx=1)
         self._pt_btn = ttk.Button(r, command=lambda: self.gui.action("toggle_point_mode"))
         self._pt_btn.pack(side=tk.LEFT, padx=1, fill=tk.X, expand=True)
 
@@ -577,6 +583,15 @@ class ControlPanel:
                 self._mark_btn.configure(text="✓ K取消" if marked else "K 标记")
             except tk.TclError:
                 pass
+
+        # 跟踪方向按钮
+        if hasattr(self, "_dir_btn") and gui.tracking_bidirectional != self._last_bidirectional:
+            direction_label = "⇄ 双向" if gui.tracking_bidirectional else "→ 单向"
+            try:
+                self._dir_btn.configure(text=direction_label)
+            except tk.TclError:
+                pass
+            self._last_bidirectional = gui.tracking_bidirectional
 
         # 选点模式按钮
         if hasattr(self, "_pt_btn"):

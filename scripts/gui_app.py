@@ -130,6 +130,9 @@ class StroboscopicGUI:
         self.tmp_dir = tmp_dir
         self.panel: ControlPanel | None = None
 
+        # ── 跟踪方向 ──
+        self.tracking_bidirectional: bool = True
+
         # ── 中止回滚 snapshot ──
         self._pre_tracking_masks: dict[int, dict[int, np.ndarray]] = {}
 
@@ -367,6 +370,11 @@ class StroboscopicGUI:
 
         elif name == "preview_frame":
             self._do_single_frame_preview()
+
+        elif name == "toggle_tracking_direction":
+            self.tracking_bidirectional = not self.tracking_bidirectional
+            direction = "⇄ 双向" if self.tracking_bidirectional else "→ 单向"
+            self._set_status(f"跟踪方向已切换为: {direction}", "info")
 
         elif name == "toggle_point_mode":
             if self._point_mode_active:
@@ -775,7 +783,7 @@ class StroboscopicGUI:
 
         self._tracked_obj_ids = {o.obj_id for o in all_with_points}
         self._tracking_pass = 0
-        self._tracking_total_frames = self.n_frames  # forward+backward 各覆盖一半，总计约 n 帧
+        self._tracking_total_frames = self.n_frames
         self._tracking_frame_count = 0
         min_seed = min(o.seed_frame for o in all_with_points)
 
@@ -783,9 +791,12 @@ class StroboscopicGUI:
         self._tracking_generator = self.predictor.propagate_in_video(
             self.inference_state, start_frame_idx=min_seed, reverse=False,
         )
-        self._tracking_total_passes = 1 + sum(
-            1 for o in all_with_points if o.seed_frame > min_seed
-        )
+        if self.tracking_bidirectional:
+            self._tracking_total_passes = 1 + sum(
+                1 for o in all_with_points if o.seed_frame > min_seed
+            )
+        else:
+            self._tracking_total_passes = 1
 
     def _advance_tracking(self) -> bool:
         if self._tracking_generator is None:
@@ -823,13 +834,13 @@ class StroboscopicGUI:
             min_seed = min(o.seed_frame for o in all_with_points)
             late_objects = [o for o in all_with_points if o.seed_frame > min_seed]
 
-            if self._tracking_pass == 1:
+            if self.tracking_bidirectional and self._tracking_pass == 1:
                 self._tracking_direction = "backward"
                 self._tracking_generator = self.predictor.propagate_in_video(
                     self.inference_state, start_frame_idx=min_seed, reverse=True,
                 )
                 return self._advance_tracking()
-            elif late_objects and self._tracking_pass - 2 < len(late_objects):
+            elif self.tracking_bidirectional and late_objects and self._tracking_pass - 2 < len(late_objects):
                 obj = late_objects[self._tracking_pass - 2]
                 self._tracking_direction = f"backward({obj.name})"
                 self._tracking_generator = self.predictor.propagate_in_video(
@@ -846,6 +857,10 @@ class StroboscopicGUI:
                 self.state = GUIState.EDIT
                 self._preview_mask = None          # 清除预览残影
                 self.current_frame_idx = min_seed
+                # 释放 memory bank 回收 GPU 显存；numpy mask 已保存在 self.masks 不受影响
+                if self.inference_state is not None:
+                    with contextlib.suppress(Exception):
+                        self.predictor.reset_state(self.inference_state)
                 total_masks = sum(len(m) for m in self.masks.values())
                 self._set_status(f"跟踪完成。{total_masks} 个 mask，覆盖 {len(self.masks)} 帧。", "success")
                 self._preview_dirty = True
@@ -1006,15 +1021,21 @@ class StroboscopicGUI:
             bg_frame = read_frame_at_fast(self.cap, bg, self._frame_cache)
             canvas = bg_frame.astype(np.float32) * self.background_alpha
 
+        from stroboscopic_image_generator import clean_mask
+
         for fidx in frames:
             if fidx in self._excluded_frames:
                 continue
-            for obj in self._visible_objects_at(fidx):
+            objs = self._visible_objects_at(fidx)
+            if not objs:
+                continue
+            # 同一帧只读一次，多个物体共享；预先转 float32 避免每个物体重复转换
+            frame = read_frame_at_fast(self.cap, fidx, self._frame_cache)
+            frame_f32 = frame.astype(np.float32)
+            for obj in objs:
                 mask = self.masks.get(fidx, {}).get(obj.obj_id)
                 if mask is None or not mask.any():
                     continue
-                frame = read_frame_at_fast(self.cap, fidx, self._frame_cache)
-                from stroboscopic_image_generator import clean_mask
                 mask_clean = clean_mask(
                     mask=mask, min_area=self.args.min_area,
                     dilate_kernel=self.args.dilate_kernel,
@@ -1024,8 +1045,7 @@ class StroboscopicGUI:
                     continue
                 m = mask_clean.astype(np.float32)[..., None]
                 fa = self.get_frame_alpha(fidx)
-                canvas = (canvas * (1.0 - fa * m)
-                          + frame.astype(np.float32) * (fa * m))
+                canvas = (canvas * (1.0 - fa * m) + frame_f32 * (fa * m))
 
         return np.clip(canvas, 0, 255).astype(np.uint8)
 
