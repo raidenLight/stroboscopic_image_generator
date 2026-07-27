@@ -108,8 +108,8 @@ class StroboscopicGUI:
         # ── 叠加顺序 ──
         self.overlay_newest_on_top: bool = True
 
-        # ── 彩色 mask 覆盖 ──
-        self.show_colored_mask: bool = False
+        # ── 彩色 mask 覆盖（逐物体）──
+        self.colored_mask_objects: set[int] = set()
 
         # ── 选点模式 ──
         self._show_points_overlay: bool = True
@@ -338,10 +338,13 @@ class StroboscopicGUI:
             self._set_status(f"叠加顺序: {label}。", "info")
 
         elif name == "toggle_colored_mask":
-            self.show_colored_mask = not self.show_colored_mask
-            self._preview_dirty = True
-            label = "开启" if self.show_colored_mask else "关闭"
-            self._set_status(f"彩色mask覆盖: {label}。", "info")
+            obj_id = args[0] if args else None
+            if obj_id is not None:
+                if obj_id in self.colored_mask_objects:
+                    self.colored_mask_objects.discard(obj_id)
+                else:
+                    self.colored_mask_objects.add(obj_id)
+                self._preview_dirty = True
 
         elif name == "range_select":
             if self.state == GUIState.EDIT:
@@ -453,7 +456,7 @@ class StroboscopicGUI:
             self.alpha_end = 1.0
             self.background_alpha = 1.0
             self.overlay_newest_on_top = True
-            self.show_colored_mask = False
+            self.colored_mask_objects.clear()
             self.state = GUIState.EDIT
             self._set_status("已重新开始。", "info")
 
@@ -1169,7 +1172,7 @@ class StroboscopicGUI:
                 canvas = (canvas * (1.0 - fa * m) + frame_f32 * (fa * m))
 
                 # 彩色 mask 覆盖：在物体区域叠加半透明颜色便于区分
-                if self.show_colored_mask:
+                if obj.obj_id in self.colored_mask_objects:
                     color_bgr = np.array(obj.color, dtype=np.float32).reshape(1, 1, 3)
                     tint = 0.35
                     canvas = canvas * (1.0 - fa * m * tint) + color_bgr * (fa * m * tint)

@@ -11,7 +11,7 @@ from gui_types import GUIState
 if TYPE_CHECKING:
     from gui_app import StroboscopicGUI
 
-PANEL_WIDTH = 460
+PANEL_WIDTH = 500
 PANEL_HEIGHT = 760
 
 
@@ -75,7 +75,7 @@ class ControlPanel:
         bottom.pack(fill=tk.X, padx=3, pady=1, side=tk.BOTTOM)
         r1 = ttk.Frame(bottom)
         r1.pack(fill=tk.X)
-        ttk.Label(r1, text="P预览 K标记 I间隔 R范围 B背景  V视图 S保存",
+        ttk.Label(r1, text="P预览 K标记 I间隔 R范围  V视图 S保存  Ctrl+列头切换蒙版",
                    font=("", 8)).pack(side=tk.LEFT)
         self.btn_restart = ttk.Button(r1, text="↺ 重置",
                                        command=lambda: self.gui.action("restart"))
@@ -263,8 +263,6 @@ class ControlPanel:
         ttk.Button(r, text="✓", width=2, command=self._apply_bg_alpha).pack(side=tk.LEFT, padx=1)
         self._order_btn = ttk.Button(r, text="新帧在上", width=8, command=lambda: self.gui.action("toggle_overlay_order"))
         self._order_btn.pack(side=tk.LEFT, padx=1)
-        self._mask_btn = ttk.Button(r, text="🎨蒙版", width=6, command=lambda: self.gui.action("toggle_colored_mask"))
-        self._mask_btn.pack(side=tk.LEFT, padx=1)
 
     def _apply_bg_alpha(self):
         try:
@@ -356,9 +354,9 @@ class ControlPanel:
         tree.column("frame", width=100, anchor=tk.W, stretch=True, minwidth=60)
         for obj in objs:
             col = f"obj_{obj.obj_id}"
-            tree.heading(col, text=f"☑ {obj.name}",
-                         command=lambda oid=obj.obj_id: self._col_toggle_all(tree, oid))
-            tree.column(col, width=56, anchor=tk.CENTER, stretch=False, minwidth=50)
+            mask_mark = " 🎨" if obj.obj_id in self.gui.colored_mask_objects else ""
+            tree.heading(col, text=f"☑ {obj.name}{mask_mark}")
+            tree.column(col, width=72, anchor=tk.CENTER, stretch=False, minwidth=64)
         tree.heading("BG", text="☑BG")
         tree.column("BG", width=44, anchor=tk.CENTER, stretch=False, minwidth=40)
         tree.heading("alpha", text="α")
@@ -407,6 +405,17 @@ class ControlPanel:
         # ── 点击处理 ──
         def _on_click(event):
             region = tree.identify_region(event.x, event.y)
+            if region == "heading":
+                col_idx = int(tree.identify_column(event.x)[1:]) - 1
+                if 2 <= col_idx <= n_objs + 1:
+                    obj = objs[col_idx - 2]
+                    ctrl_pressed = (event.state & 0x0004) != 0
+                    if ctrl_pressed:
+                        self.gui.action("toggle_colored_mask", obj.obj_id)
+                        self._update_obj_headings(tree)
+                    else:
+                        self._col_toggle_all(tree, obj.obj_id)
+                return
             if region != "cell":
                 return
             col = tree.identify_column(event.x)
@@ -502,11 +511,21 @@ class ControlPanel:
             if has_mask:
                 vals[col_idx] = "☑" if new_val else "☐"
                 tree.item(item, values=vals)
-        # 更新列头文字
-        tree.heading(col_name, text=f"{'☑' if new_val else '☐'} {objs[obj_idx].name}")
+        # 更新列头文字（保留蒙版标记）
+        mask_mark = " 🎨" if obj_id in self.gui.colored_mask_objects else ""
+        tree.heading(col_name, text=f"{'☑' if new_val else '☐'} {objs[obj_idx].name}{mask_mark}")
 
         self.gui._data_version += 1
         self.gui._preview_dirty = True
+
+    def _update_obj_headings(self, tree) -> None:
+        """刷新所有物体列头文字（蒙版标记变化后调用）。"""
+        for obj in self.gui.objects:
+            col = f"obj_{obj.obj_id}"
+            mask_mark = " 🎨" if obj.obj_id in self.gui.colored_mask_objects else ""
+            current = tree.heading(col, "text")
+            check = current[0] if current and current[0] in "☑☐" else "☑"
+            tree.heading(col, text=f"{check} {obj.name}{mask_mark}")
 
     def _jump_to_frame(self, fidx: int) -> None:
         """双击帧列表跳转到该帧。"""
@@ -608,14 +627,6 @@ class ControlPanel:
             txt = "新帧在上" if gui.overlay_newest_on_top else "旧帧在上"
             try:
                 self._order_btn.configure(text=txt)
-            except tk.TclError:
-                pass
-
-        # 彩色 mask 按钮
-        if hasattr(self, "_mask_btn"):
-            txt = "🎨开" if gui.show_colored_mask else "🎨关"
-            try:
-                self._mask_btn.configure(text=txt)
             except tk.TclError:
                 pass
 
