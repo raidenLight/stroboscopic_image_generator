@@ -105,6 +105,12 @@ class StroboscopicGUI:
         self.background_alpha: float = 1.0
         self.per_frame_alpha: dict[int, float] = {}
 
+        # ── 叠加顺序 ──
+        self.overlay_newest_on_top: bool = True
+
+        # ── 彩色 mask 覆盖 ──
+        self.show_colored_mask: bool = False
+
         # ── 选点模式 ──
         self._show_points_overlay: bool = True
         self._point_mode_active: bool = True   # 初始允许点击选点
@@ -325,6 +331,18 @@ class StroboscopicGUI:
             self._preview_dirty = True
             self._set_status("逐帧 alpha 已重置。", "info")
 
+        elif name == "toggle_overlay_order":
+            self.overlay_newest_on_top = not self.overlay_newest_on_top
+            self._preview_dirty = True
+            label = "新帧在上" if self.overlay_newest_on_top else "旧帧在上"
+            self._set_status(f"叠加顺序: {label}。", "info")
+
+        elif name == "toggle_colored_mask":
+            self.show_colored_mask = not self.show_colored_mask
+            self._preview_dirty = True
+            label = "开启" if self.show_colored_mask else "关闭"
+            self._set_status(f"彩色mask覆盖: {label}。", "info")
+
         elif name == "range_select":
             if self.state == GUIState.EDIT:
                 if self._range_start is None:
@@ -434,6 +452,8 @@ class StroboscopicGUI:
             self.alpha_start = 1.0
             self.alpha_end = 1.0
             self.background_alpha = 1.0
+            self.overlay_newest_on_top = True
+            self.show_colored_mask = False
             self.state = GUIState.EDIT
             self._set_status("已重新开始。", "info")
 
@@ -1114,6 +1134,9 @@ class StroboscopicGUI:
 
     def _render_composite(self) -> np.ndarray:
         frames = sorted(self.composite_frames)
+        # 叠加顺序：默认新帧在上，切换后旧帧在上
+        if not self.overlay_newest_on_top:
+            frames = list(reversed(frames))
 
         # 多帧背景融合作为基底
         bg_canvas = self._render_background_merge()
@@ -1144,6 +1167,12 @@ class StroboscopicGUI:
                 m = mask_clean.astype(np.float32)[..., None]
                 fa = self.get_frame_alpha(fidx)
                 canvas = (canvas * (1.0 - fa * m) + frame_f32 * (fa * m))
+
+                # 彩色 mask 覆盖：在物体区域叠加半透明颜色便于区分
+                if self.show_colored_mask:
+                    color_bgr = np.array(obj.color, dtype=np.float32).reshape(1, 1, 3)
+                    tint = 0.35
+                    canvas = canvas * (1.0 - fa * m * tint) + color_bgr * (fa * m * tint)
 
         return np.clip(canvas, 0, 255).astype(np.uint8)
 

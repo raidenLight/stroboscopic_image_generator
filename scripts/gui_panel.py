@@ -261,7 +261,10 @@ class ControlPanel:
         e_bg.pack(side=tk.LEFT, padx=1)
         e_bg.bind("<Return>", lambda e: self._apply_bg_alpha())
         ttk.Button(r, text="✓", width=2, command=self._apply_bg_alpha).pack(side=tk.LEFT, padx=1)
-        ttk.Button(r, text="↩清除", command=lambda: self.gui.action("reset_per_frame_alphas")).pack(side=tk.RIGHT, padx=(4, 0))
+        self._order_btn = ttk.Button(r, text="新帧在上", width=8, command=lambda: self.gui.action("toggle_overlay_order"))
+        self._order_btn.pack(side=tk.LEFT, padx=1)
+        self._mask_btn = ttk.Button(r, text="🎨蒙版", width=6, command=lambda: self.gui.action("toggle_colored_mask"))
+        self._mask_btn.pack(side=tk.LEFT, padx=1)
 
     def _apply_bg_alpha(self):
         try:
@@ -599,6 +602,22 @@ class ControlPanel:
             except tk.TclError:
                 pass
             self._last_bidirectional = gui.tracking_bidirectional
+
+        # 叠加顺序按钮
+        if hasattr(self, "_order_btn"):
+            txt = "新帧在上" if gui.overlay_newest_on_top else "旧帧在上"
+            try:
+                self._order_btn.configure(text=txt)
+            except tk.TclError:
+                pass
+
+        # 彩色 mask 按钮
+        if hasattr(self, "_mask_btn"):
+            txt = "🎨开" if gui.show_colored_mask else "🎨关"
+            try:
+                self._mask_btn.configure(text=txt)
+            except tk.TclError:
+                pass
 
         # 选点模式按钮
         if hasattr(self, "_pt_btn"):
